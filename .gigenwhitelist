@@ -1,0 +1,15 @@
+# Git Ignore Generator - Whitelist
+# This file defines patterns that should NOT be ignored by .gitignore
+# Add patterns here that you want to keep in your repository despite matching .gitignore rules
+# 
+# Usage:
+#   Add patterns one per line (without leading !)
+#   These patterns will be added to .gitignore as !pattern
+#   
+# Examples:
+#   .env.example     # Keep example env files
+#   docs/*.md        # Keep documentation
+#   config/local.js  # Keep specific config files
+
+# Magic Scripts files that should be tracked
+.gigenwhitelist

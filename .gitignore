@@ -1,0 +1,123 @@
+# Generated .gitignore for  ms macos linux windows vscode idea ai  
+# Thu  7 Aug 2025 12:30:52 KST
+# Author: blir
+# Email: iam@blairlee.me
+
+
+# === ms ===
+# Magic Scripts cache
+.ms-cache/
+
+# === macos ===
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+# Icon must end with two \r
+Icon
+
+
+# Thumbnails
+Temporary Items
+.apdisk
+
+# === linux ===
+# Linux
+*~
+.fuse_hidden*
+.Trash-*
+.nfs*
+
+# === windows ===
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# === vscode ===
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.history/
+*.vsix
+
+# == idea ===
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+.idea_modules/
+
+# === ai ===
+# AI Tools and IDEs
+# Cursor AI IDE
+.cursorrules
+.cursor/
+cursor.json
+
+# Continue.dev
+.continue/
+continue.json
+
+# GitHub Copilot
+.copilot/
+copilot-suggestions.json
+
+# Codeium
+.codeium/
+codeium.json
+
+# Tabnine
+.tabnine/
+tabnine.json
+
+# ChatGPT / OpenAI files
+.openai/
+openai.json
+chatgpt-session.json
+
+# Claude / Anthropic files
+.claude/
+claude.json
+anthropic-session.json
+
+# General AI assistant files
+*.ai-conversation
+*.ai-session
+*.ai-context
+.ai-cache/
+.ai-history/
+.ai-temp/
+
+# AI code generation artifacts
+.ai-generated/
+ai-prompts.md
+ai-context.md
+
+# Temporary AI files
+temp_ai_*
+.temp-ai/
+ai_temp_*
+
+# === custom ===
+# Add your custom patterns below this line

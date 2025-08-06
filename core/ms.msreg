@@ -1,0 +1,30 @@
+# Magic Scripts Default Registry
+# Format: 
+#   command|name|script_uri|description|category|version|checksum (for commands)
+#   config|key|default_value|description|category|scripts (for configurations)
+
+# Core Commands
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.sh|Magic Scripts main interface|core|0.0.1|28f0100d
+command|gigen|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/gitignore-gen.sh|.gitignore template generator|development|0.0.1|d606bfec
+command|pgadduser|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/postgres-adduser.sh|PostgreSQL user and database setup|database|0.0.1|0f87c9bd
+command|dcwinit|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/docker-compose-init.sh|Docker Compose wireframe generator|docker|0.0.1|ef4c4b71
+command|dockergen|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/dockerfile-gen.sh|Optimized Dockerfile generator for various runtimes|docker|0.0.1|ec9abe57
+command|licgen|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/license-gen.sh|License generator for various licenses|development|0.0.1|310df49d
+command|projinit|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/project-init.sh|Project initializer for various frameworks|development|0.0.1|e6446d2c
+command|msreg|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/msreg.sh|Registry management and checksum calculator|development|0.0.1|46c1d8bf
+
+# Configuration Keys
+config|AUTHOR_NAME||Your name for generated files (licenses, gitignore headers)|global|gigen,licgen,projinit
+config|AUTHOR_EMAIL||Your email for generated files|global|gigen,licgen,projinit
+config|POSTGRES_HOST|localhost|PostgreSQL server hostname or IP address|database|pgadduser
+config|POSTGRES_PORT|5432|PostgreSQL server port number|database|pgadduser
+config|POSTGRES_ADMIN|postgres|PostgreSQL admin username|database|pgadduser
+config|POSTGRES_PASSWORD||PostgreSQL admin password|database|pgadduser
+config|DOCKER_COMPOSE_VERSION|3.8|Docker Compose file version|docker|dcwinit
+config|DOCKER_EXPOSE_PORTS|true|Expose ports by default in Docker services|docker|dcwinit
+config|DOCKER_CREATE_NETWORK|false|Create custom networks by default|docker|dcwinit
+config|DEFAULT_NODE_VERSION|18|Default Node.js version for new projects|project|projinit
+config|DEFAULT_PYTHON_VERSION|3.11|Default Python version for new projects|project|projinit
+config|DEFAULT_LICENSE|mit|Default license type for new projects|project|licgen
+config|GIGEN_AUTO_INIT|true|Auto-initialize .gigenwhitelist on first use|development|gigen
+config|GIGEN_BACKUP_COUNT|5|Number of .gitignore backups to keep|development|gigen
