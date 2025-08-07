@@ -130,10 +130,12 @@ remove_registry() {
         return 1
     fi
     
-    # Prevent removal of default registry
+    # Warn about removing default registry but allow it
     if [ "$name" = "$DEFAULT_REGISTRY_NAME" ]; then
-        echo "Error: Cannot remove default registry '$DEFAULT_REGISTRY_NAME'" >&2
-        return 1
+        echo "Warning: Removing the default registry '$DEFAULT_REGISTRY_NAME'" >&2
+        echo "You can restore it later with:" >&2
+        echo "  ms reg add $DEFAULT_REGISTRY_NAME $DEFAULT_REGISTRY_URL" >&2
+        echo "" >&2
     fi
     
     if [ ! -f "$REGLIST_FILE" ]; then
