@@ -432,6 +432,149 @@ search_commands() {
     rm -f "$temp_results"
 }
 
+# Download and parse .msver file
+download_and_parse_msver() {
+    local msver_url="$1"
+    local target_cmd="$2"      # Optional: filter by command
+    local target_version="$3"  # Optional: filter by version
+    
+    local temp_msver="/tmp/ms_msver_$$"
+    
+    if ! download_file "$msver_url" "$temp_msver"; then
+        echo "Error: Cannot download .msver file from $msver_url" >&2
+        return 1
+    fi
+    
+    # Parse .msver file
+    while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3; do
+        [ "${entry_type#\#}" != "$entry_type" ] && continue  # Skip comments
+        [ -z "$entry_type" ] && continue
+        
+        case "$entry_type" in
+            version)
+                local version="$key"
+                local url="$value" 
+                local checksum="$desc_or_checksum"
+                
+                # Filter by version if specified
+                if [ -n "$target_version" ] && [ "$version" != "$target_version" ]; then
+                    continue
+                fi
+                
+                echo "version|$version|$url|$checksum"
+                ;;
+            config)
+                local config_key="$key"
+                local default_value="$value"
+                local description="$desc_or_checksum"
+                local category="$extra1"
+                local scripts="$extra2"
+                
+                # Filter by command if specified (check if command is in scripts list)
+                if [ -n "$target_cmd" ]; then
+                    case ",$scripts," in
+                        *,"$target_cmd",*) ;; # Command found in scripts list
+                        *) continue ;;        # Command not found, skip
+                    esac
+                fi
+                
+                echo "config|$config_key|$default_value|$description|$category|$scripts"
+                ;;
+        esac
+    done < "$temp_msver"
+    
+    rm -f "$temp_msver"
+}
+
+# Get command info from 2-tier registry system
+get_command_info() {
+    local cmd="$1"
+    local version="$2"  # Optional: specific version
+    
+    # First get command metadata from .msreg files
+    local cmd_meta=""
+    
+    # Check development registry first
+    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
+        cmd_meta=$(grep "^command|$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" | head -1)
+    fi
+    
+    # Fallback to cached registries
+    if [ -z "$cmd_meta" ] && [ -f "$REGLIST_FILE" ]; then
+        while IFS=':' read -r name url; do
+            [ -z "$name" ] && continue
+            [ -z "$url" ] && continue
+            [ "${name#\#}" != "$name" ] && continue  # Skip comments
+            
+            local reg_file="$REG_DIR/${name}.msreg"
+            if [ -f "$reg_file" ]; then
+                cmd_meta=$(grep "^command|$cmd|" "$reg_file" | head -1)
+                [ -n "$cmd_meta" ] && break
+            fi
+        done < "$REGLIST_FILE"
+    fi
+    
+    if [ -z "$cmd_meta" ]; then
+        return 1
+    fi
+    
+    # Parse command metadata: command|name|msver_url|description|category|msver_checksum
+    local prefix=$(echo "$cmd_meta" | cut -d'|' -f1)
+    local name=$(echo "$cmd_meta" | cut -d'|' -f2)
+    local msver_url=$(echo "$cmd_meta" | cut -d'|' -f3)
+    local description=$(echo "$cmd_meta" | cut -d'|' -f4)
+    local category=$(echo "$cmd_meta" | cut -d'|' -f5)
+    local msver_checksum=$(echo "$cmd_meta" | cut -d'|' -f6)
+    
+    # Now get version info from .msver file
+    local version_info=""
+    if [ -n "$msver_url" ]; then
+        version_info=$(download_and_parse_msver "$msver_url" "$cmd" "$version")
+    fi
+    
+    # Return combined info
+    echo "command_meta|$name|$description|$category|$msver_url|$msver_checksum"
+    echo "$version_info"
+}
+
+# Get all versions for a command
+get_command_versions() {
+    local cmd="$1"
+    
+    # Get command metadata first
+    local cmd_info=$(get_command_info "$cmd")
+    
+    if [ -z "$cmd_info" ]; then
+        return 1
+    fi
+    
+    # Extract .msver URL from command metadata  
+    local msver_url=$(echo "$cmd_info" | grep "^command_meta|" | cut -d'|' -f5)
+    
+    if [ -n "$msver_url" ]; then
+        download_and_parse_msver "$msver_url" "$cmd" | grep "^version|"
+    fi
+}
+
+# Get config keys for a specific command
+get_command_config_keys() {
+    local cmd="$1"
+    
+    # Get command metadata first
+    local cmd_info=$(get_command_info "$cmd")
+    
+    if [ -z "$cmd_info" ]; then
+        return 1
+    fi
+    
+    # Extract .msver URL from command metadata
+    local msver_url=$(echo "$cmd_info" | grep "^command_meta|" | cut -d'|' -f5)
+    
+    if [ -n "$msver_url" ]; then
+        download_and_parse_msver "$msver_url" "$cmd" | grep "^config|"
+    fi
+}
+
 # Get version
 get_version() {
     echo "$VERSION"

@@ -111,6 +111,116 @@ show_help() {
     echo "  ${CYAN}ms status${NC}                              # Check installation"
 }
 
+# Wrapper for backward compatibility - converts new 2-tier format to old format
+get_script_info() {
+    local cmd="$1"
+    local version="$2"  # Optional
+    
+    # Get command info using new 2-tier system
+    local cmd_info
+    if command -v get_command_info >/dev/null 2>&1; then
+        cmd_info=$(get_command_info "$cmd" "$version")
+        
+        if [ -n "$cmd_info" ]; then
+            # Extract command metadata: command_meta|name|description|category|msver_url|msver_checksum
+            local cmd_meta=$(echo "$cmd_info" | grep "^command_meta|" | head -1)
+            
+            if [ -n "$cmd_meta" ]; then
+                local name=$(echo "$cmd_meta" | cut -d'|' -f2)
+                local description=$(echo "$cmd_meta" | cut -d'|' -f3)
+                local category=$(echo "$cmd_meta" | cut -d'|' -f4)
+                local msver_url=$(echo "$cmd_meta" | cut -d'|' -f5)
+                
+                # Get version info - use specified version or first available version
+                local version_info
+                if [ -n "$version" ]; then
+                    version_info=$(echo "$cmd_info" | grep "^version|$version|" | head -1)
+                else
+                    version_info=$(echo "$cmd_info" | grep "^version|" | head -1)
+                fi
+                
+                if [ -n "$version_info" ]; then
+                    local ver=$(echo "$version_info" | cut -d'|' -f2)
+                    local url=$(echo "$version_info" | cut -d'|' -f3)  
+                    local checksum=$(echo "$version_info" | cut -d'|' -f4)
+                    
+                    # Return in old format: command|name|script_uri|description|category|version|checksum
+                    echo "command|$name|$url|$description|$category|$ver|$checksum"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+    
+    return 1
+}
+
+# Helper for install functions - finds best version for a command
+find_best_version() {
+    local cmd="$1"
+    local requested_version="$2"  # Optional: specific version requested
+    local allow_dev="$3"          # Optional: allow dev versions
+    
+    if command -v get_command_versions >/dev/null 2>&1; then
+        local versions=$(get_command_versions "$cmd")
+        
+        if [ -z "$versions" ]; then
+            return 1
+        fi
+        
+        local best_version=""
+        local best_url=""
+        local best_checksum=""
+        local dev_version=""
+        local dev_url=""
+        local dev_checksum=""
+        
+        # Parse all available versions
+        echo "$versions" | while IFS='|' read -r prefix version url checksum; do
+            [ "$prefix" != "version" ] && continue
+            
+            # If specific version requested, match exactly
+            if [ -n "$requested_version" ]; then
+                if [ "$version" = "$requested_version" ]; then
+                    echo "$version|$url|$checksum"
+                    return 0
+                fi
+                continue
+            fi
+            
+            # Store dev version separately
+            if [ "$version" = "dev" ]; then
+                dev_version="$version"
+                dev_url="$url"
+                dev_checksum="$checksum"
+                if [ "$allow_dev" = "true" ]; then
+                    echo "$version|$url|$checksum"
+                    return 0
+                fi
+                continue
+            fi
+            
+            # Find highest semantic version (simplified - just use first non-dev for now)
+            if [ -z "$best_version" ]; then
+                best_version="$version"
+                best_url="$url"
+                best_checksum="$checksum"
+            fi
+        done
+        
+        # If we get here and no specific version was found, return best or dev fallback
+        if [ -n "$best_version" ]; then
+            echo "$best_version|$best_url|$best_checksum"
+            return 0
+        elif [ -n "$dev_version" ]; then
+            echo "$dev_version|$dev_url|$dev_checksum"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
 suggest_similar_command() {
     local input="$1"
     

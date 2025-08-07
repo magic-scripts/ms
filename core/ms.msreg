@@ -1,30 +1,16 @@
-# Magic Scripts Default Registry
-# Format: 
-#   command|name|script_uri|description|category|version|checksum (for commands)
-#   config|key|default_value|description|category|scripts (for configurations)
+# Magic Scripts Master Registry (2-Tier System)
+# Format: command|name|msver_url|description|category|msver_checksum
+# 
+# Each command now points to its own .msver file containing:
+# - Version information (version|ver|url|checksum)
+# - Configuration keys (config|key|default|desc|category|scripts)
 
-# Core Commands
-command|ms|https://raw.githubusercontent.com/magic-scripts/ms/develop/core/ms.sh|Magic Scripts main interface (dev)|core|dev|dev
-command|gigen|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/gitignore-gen.sh|.gitignore template generator|development|dev|dev
-command|pgadduser|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/postgres-adduser.sh|PostgreSQL user and database setup|database|dev|dev
-command|dcwinit|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/docker-compose-init.sh|Docker Compose wireframe generator|docker|dev|dev
-command|dockergen|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/dockerfile-gen.sh|Optimized Dockerfile generator for various runtimes|docker|dev|dev
-command|licgen|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/license-gen.sh|License generator for various licenses|development|dev|dev
-command|projinit|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/project-init.sh|Project initializer for various frameworks|development|dev|dev
-command|msreg|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/msreg.sh|Registry management and checksum calculator|development|dev|dev
-
-# Configuration Keys
-config|AUTHOR_NAME||Your name for generated files (licenses, gitignore headers)|global|gigen,licgen,projinit
-config|AUTHOR_EMAIL||Your email for generated files|global|gigen,licgen,projinit
-config|POSTGRES_HOST|localhost|PostgreSQL server hostname or IP address|database|pgadduser
-config|POSTGRES_PORT|5432|PostgreSQL server port number|database|pgadduser
-config|POSTGRES_ADMIN|postgres|PostgreSQL admin username|database|pgadduser
-config|POSTGRES_PASSWORD||PostgreSQL admin password|database|pgadduser
-config|DOCKER_COMPOSE_VERSION|3.8|Docker Compose file version|docker|dcwinit
-config|DOCKER_EXPOSE_PORTS|true|Expose ports by default in Docker services|docker|dcwinit
-config|DOCKER_CREATE_NETWORK|false|Create custom networks by default|docker|dcwinit
-config|DEFAULT_NODE_VERSION|18|Default Node.js version for new projects|project|projinit
-config|DEFAULT_PYTHON_VERSION|3.11|Default Python version for new projects|project|projinit
-config|DEFAULT_LICENSE|mit|Default license type for new projects|project|licgen
-config|GIGEN_AUTO_INIT|true|Auto-initialize .gigenwhitelist on first use|development|gigen
-config|GIGEN_BACKUP_COUNT|5|Number of .gitignore backups to keep|development|gigen
+# Core Commands - pointing to individual .msver files
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/develop/core/ms.msver|Magic Scripts main interface|core|dev
+command|gigen|https://raw.githubusercontent.com/magic-scripts/gigen/develop/gigen.msver|.gitignore template generator|development|dev
+command|licgen|https://raw.githubusercontent.com/magic-scripts/licgen/develop/licgen.msver|License generator for various licenses|development|dev
+command|pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/develop/pgadduser.msver|PostgreSQL user and database setup|database|dev
+command|dcwinit|https://raw.githubusercontent.com/magic-scripts/dcwinit/develop/dcwinit.msver|Docker Compose wireframe generator|docker|dev
+command|dockergen|https://raw.githubusercontent.com/magic-scripts/dockergen/develop/dockergen.msver|Optimized Dockerfile generator for various runtimes|docker|dev
+command|projinit|https://raw.githubusercontent.com/magic-scripts/projinit/develop/projinit.msver|Project initializer for various frameworks|development|dev
+command|msreg|https://raw.githubusercontent.com/magic-scripts/msreg/develop/msreg.msver|Registry management and checksum calculator|development|dev

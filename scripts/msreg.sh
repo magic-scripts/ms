@@ -37,9 +37,10 @@ show_help() {
     echo "  ${CYAN}$SCRIPT_NAME -f core/ms.msreg config add AUTHOR_NAME \"\" \"Your name\" global \"gigen,licgen\"${NC}"
     echo "  ${CYAN}$SCRIPT_NAME checksum ./scripts/gigen.sh${NC}"
     echo ""
-    echo "Registry format:"
-    echo "  command|name|script_uri|description|category|version|checksum"
-    echo "  config|key|default_value|description|category|scripts"
+    echo "Registry formats:"
+    echo "  .msreg: command|name|msver_url|description|category|msver_checksum"
+    echo "  .msver: version|version_name|download_url|checksum"
+    echo "          config|key|default_value|description|category|scripts"
 }
 
 show_version() {
