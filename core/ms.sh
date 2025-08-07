@@ -63,13 +63,14 @@ show_help() {
     echo "  ${GREEN}reg remove <name>${NC}       Remove a registry"
     echo ""
     echo "${YELLOW}Package Management:${NC}"
-    echo "  ${GREEN}install <registry>${NC}      Install all commands from a registry"
-    echo "  ${GREEN}install <commands...>${NC}   Install specific commands"
+    echo "  ${GREEN}install <commands...>${NC}   Install specific commands (use cmd:version for versions)"
+    echo "  ${GREEN}install -r <registry>${NC}   Install all commands from a registry"
     echo "  ${GREEN}reinstall <commands...>${NC} Completely reinstall commands (remove + install)"
     echo "  ${GREEN}update${NC}                  Update all installed commands and Magic Scripts"
     echo "  ${GREEN}update <command>${NC}        Update specific command to latest version"
     echo "  ${GREEN}update self${NC}             Update Magic Scripts itself only"
     echo "  ${GREEN}uninstall <commands...>${NC} Uninstall specific commands"
+    echo "  ${GREEN}versions <command>${NC}      Show available versions for a command"
     echo ""
     
     # Show installed commands only
@@ -308,12 +309,19 @@ show_status() {
     local installed_count=0
     for cmd in $all_commands; do
         if [ -f "$INSTALL_DIR/$cmd" ]; then
+            # Get version and description
+            local version=$(get_installed_version "$cmd")
+            if [ "$version" = "unknown" ] || [ -z "$version" ]; then
+                version="?"
+            fi
+            
             if command -v get_script_description >/dev/null 2>&1; then
                 desc=$(get_script_description "$cmd" 2>/dev/null || echo "Magic Scripts command")
             else
                 desc="Magic Scripts command"
             fi
-            printf "  ${GREEN}✓ %-12s${NC} %s\n" "$cmd" "$desc"
+            
+            printf "  ${GREEN}✓ %-12s${NC} ${BLUE}[%s]${NC} %s\n" "$cmd" "$version" "$desc"
             installed_count=$((installed_count + 1))
         fi
     done
@@ -966,15 +974,29 @@ install_script() {
     local target_script="$MAGIC_DATA_DIR/scripts/$script_filename"
     
     # Get version information
-    local registry_version=$(get_registry_version "$cmd")
+    local registry_version="$version"  # Use the passed version
+    if [ -z "$registry_version" ]; then
+        registry_version=$(get_registry_version "$cmd")
+    fi
     local installed_version=$(get_installed_version "$cmd")
     
-    # Skip installation if already installed with same version (unless force flag specified)
+    # Check if already installed (unless force flag specified)
     if [ "$force_flag" != "force" ] && [ -f "$INSTALL_DIR/$cmd" ] && [ "$installed_version" != "unknown" ]; then
-        local comparison=$(compare_versions "$installed_version" "$registry_version")
-        if [ "$comparison" = "same" ]; then
+        # If same version, skip
+        if [ "$installed_version" = "$registry_version" ]; then
             return 2  # Already installed with correct version (skip code)
         fi
+        # If different version, need to reinstall - remove old version first
+        rm -f "$INSTALL_DIR/$cmd"
+        remove_installation_metadata "$cmd"
+        # Remove old script file if exists
+        local old_script_path="$MAGIC_DATA_DIR/scripts/*"
+        for script in $old_script_path; do
+            if [ -f "$script" ] && grep -q "^#!/" "$script" && grep -q "$cmd" "$script"; then
+                rm -f "$script"
+                break
+            fi
+        done
     fi
     
     # Use registry version as target version
@@ -1555,8 +1577,16 @@ handle_reinstall() {
     local failed_count=0
     
     for cmd in "$@"; do
+        # Parse command:version format
+        local base_cmd="$cmd"
+        local requested_version=""
+        if echo "$cmd" | grep -q ':'; then
+            base_cmd=$(echo "$cmd" | cut -d':' -f1)
+            requested_version=$(echo "$cmd" | cut -d':' -f2)
+        fi
+        
         # Special handling for ms itself
-        if [ "$cmd" = "ms" ]; then
+        if [ "$base_cmd" = "ms" ]; then
             # handle_ms_force_reinstall shows its own messages
             if handle_ms_force_reinstall; then
                 reinstall_count=$((reinstall_count + 1))
@@ -1570,16 +1600,16 @@ handle_reinstall() {
         
         # First, uninstall the command
         local INSTALL_DIR="$HOME/.local/bin/ms"
-        if [ -f "$INSTALL_DIR/$cmd" ]; then
-            rm -f "$INSTALL_DIR/$cmd"
+        if [ -f "$INSTALL_DIR/$base_cmd" ]; then
+            rm -f "$INSTALL_DIR/$base_cmd"
         fi
         
         # Remove metadata
-        remove_installation_metadata "$cmd"
+        remove_installation_metadata "$base_cmd"
         
         # Remove script file if exists
         if command -v get_script_info >/dev/null 2>&1; then
-            local script_info=$(get_script_info "$cmd" 2>/dev/null)
+            local script_info=$(get_script_info "$base_cmd" "$requested_version" 2>/dev/null)
             if [ -n "$script_info" ]; then
                 local script_uri=$(echo "$script_info" | cut -d'|' -f3)
                 local script_filename=$(basename "$script_uri")
@@ -1591,15 +1621,60 @@ handle_reinstall() {
         fi
         
         # Now reinstall using the install logic
-        if command -v get_script_info >/dev/null 2>&1; then
-            local script_info=$(get_script_info "$cmd" 2>/dev/null)
-            if [ -n "$script_info" ]; then
-                local script_uri=$(echo "$script_info" | cut -d'|' -f3)
-                if install_script "$cmd" "$script_uri" "ms" "force"; then
-                    echo "${GREEN}done${NC}"
-                    reinstall_count=$((reinstall_count + 1))
+        if command -v get_command_info >/dev/null 2>&1; then
+            # If no version specified, use currently installed version
+            if [ -z "$requested_version" ]; then
+                requested_version=$(get_installed_version "$base_cmd")
+                if [ "$requested_version" = "unknown" ] || [ -z "$requested_version" ]; then
+                    # If can't determine current version, use latest
+                    requested_version=""
+                fi
+            fi
+            
+            # Use get_command_info for 2-tier system support
+            local full_cmd_info=$(get_command_info "$base_cmd" "$requested_version" 2>/dev/null)
+            
+            if [ -n "$full_cmd_info" ]; then
+                local version_info=""
+                if [ -n "$requested_version" ]; then
+                    # Look for specific version
+                    version_info=$(echo "$full_cmd_info" | grep "^version|$requested_version|" | head -1)
                 else
-                    echo "${RED}failed${NC}"
+                    # Look for best available version (non-dev first, then dev)
+                    version_info=$(echo "$full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
+                    if [ -z "$version_info" ]; then
+                        version_info=$(echo "$full_cmd_info" | grep "^version|dev|" | head -1)
+                    fi
+                fi
+                
+                if [ -n "$version_info" ]; then
+                    local version_name=$(echo "$version_info" | cut -d'|' -f2)
+                    local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                    
+                    # Get the registry name from metadata or find which registry has this command
+                    local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
+                    if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
+                        # Try to find which registry contains this command
+                        registry_name="ms"  # Default fallback
+                        if command -v get_registry_names >/dev/null 2>&1; then
+                            for reg in $(get_registry_names); do
+                                if get_registry_commands "$reg" 2>/dev/null | grep -q "^command|$base_cmd|"; then
+                                    registry_name="$reg"
+                                    break
+                                fi
+                            done
+                        fi
+                    fi
+                    
+                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force"; then
+                        echo "${GREEN}done${NC}"
+                        reinstall_count=$((reinstall_count + 1))
+                    else
+                        echo "${RED}failed${NC}"
+                        failed_count=$((failed_count + 1))
+                    fi
+                else
+                    echo "${RED}version not found${NC}"
                     failed_count=$((failed_count + 1))
                 fi
             else
@@ -2021,30 +2096,52 @@ handle_doctor() {
             local cmd=$(basename "$meta_file" .msmeta)
             commands_checked=$((commands_checked + 1))
             
-            # Check if command exists
-            local install_dir="$HOME/.local/bin"
-            if [ -f "$install_dir/$cmd" ] || [ -f "$HOME/.local/bin/ms/$cmd" ]; then
+            # Get version information
+            local installed_version=$(get_installed_version "$cmd")
+            local registry_version=$(get_registry_version "$cmd")
+            local version_display="$installed_version"
+            if [ "$installed_version" = "unknown" ]; then
+                version_display="?"
+            fi
+            
+            # Check if command exists in correct location (2-tier system)
+            local install_dir="$HOME/.local/bin/ms"
+            if [ -f "$install_dir/$cmd" ]; then
                 # Verify checksum
                 verify_command_checksum "$cmd"
                 local verify_result=$?
                 
+                # Check for updates
+                local update_status=""
+                if [ "$installed_version" != "unknown" ] && [ "$registry_version" != "unknown" ]; then
+                    local comparison=$(compare_versions "$installed_version" "$registry_version")
+                    if [ "$comparison" = "update_needed" ]; then
+                        update_status=" ${YELLOW}(update available: $registry_version)${NC}"
+                    fi
+                fi
+                
                 case $verify_result in
                     0)
-                        echo "  ✅ $cmd: OK"
+                        echo "  ✅ $cmd ${BLUE}[$version_display]${NC}: OK$update_status"
                         ;;
                     1)
-                        echo "  ❌ $cmd: Checksum mismatch"
+                        echo "  ❌ $cmd ${BLUE}[$version_display]${NC}: Checksum mismatch$update_status"
                         total_issues=$((total_issues + 1))
                         checksum_issues=$((checksum_issues + 1))
                         
                         if [ "$fix_mode" = true ]; then
                             echo "    🔧 Attempting to reinstall $cmd..."
-                            local version=$(get_installed_version "$cmd")
-                            if command -v get_script_info >/dev/null 2>&1; then
-                                local script_info=$(get_script_info "$cmd" 2>/dev/null)
-                                if [ -n "$script_info" ]; then
-                                    local file=$(echo "$script_info" | cut -d'|' -f3)
-                                    if install_script "$cmd" "$file" "$version" >/dev/null 2>&1; then
+                            # Use 2-tier system for reinstall
+                            if command -v get_command_info >/dev/null 2>&1; then
+                                local full_cmd_info=$(get_command_info "$cmd" "$installed_version" 2>/dev/null)
+                                local version_info=$(echo "$full_cmd_info" | grep "^version|$installed_version|" | head -1)
+                                if [ -n "$version_info" ]; then
+                                    local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                                    local registry_name=$(get_installation_metadata "$cmd" "registry_name")
+                                    if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
+                                        registry_name="ms"
+                                    fi
+                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" >/dev/null 2>&1; then
                                         echo "    ✅ $cmd: Reinstalled successfully"
                                         fixed_issues=$((fixed_issues + 1))
                                     else
@@ -2055,21 +2152,21 @@ handle_doctor() {
                         fi
                         ;;
                     2)
-                        echo "  ⚠️  $cmd: Cannot verify (no metadata)"
+                        echo "  ⚠️  $cmd ${BLUE}[$version_display]${NC}: Cannot verify (no checksum data)$update_status"
                         ;;
                     3)
-                        echo "  ❌ $cmd: Script file missing"
+                        echo "  ❌ $cmd ${BLUE}[$version_display]${NC}: Script file missing$update_status"
                         total_issues=$((total_issues + 1))
                         ;;
                     4)
-                        echo "  ⚠️  $cmd: Cannot calculate checksum"
+                        echo "  ⚠️  $cmd ${BLUE}[$version_display]${NC}: Cannot calculate checksum$update_status"
                         ;;
                     5)
-                        echo "  ℹ️  $cmd: Dev version (checksum not verified)"
+                        echo "  ℹ️  $cmd ${BLUE}[$version_display]${NC}: Dev version (checksum not verified)$update_status"
                         ;;
                 esac
             else
-                echo "  ❌ $cmd: Command not found in PATH"
+                echo "  ❌ $cmd ${BLUE}[$version_display]${NC}: Command not found in PATH$update_status"
                 total_issues=$((total_issues + 1))
             fi
         done
