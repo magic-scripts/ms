@@ -112,52 +112,69 @@ find_best_ms_version() {
         exit 1
     fi
     
-    # Parse registry for ms command versions
-    while IFS='|' read -r cmd_type name url desc category version checksum; do
+    # Parse registry for ms command - now handling 2-tier system
+    # New format: command|name|msver_url|description|category|msver_checksum
+    while IFS='|' read -r cmd_type name msver_url desc category msver_checksum; do
         [ "$cmd_type" = "command" ] || continue
         [ "$name" = "ms" ] || continue
         
-        # If specific version requested, match exactly
-        if [ -n "$REQUESTED_VERSION" ]; then
-            if [ "$version" = "$REQUESTED_VERSION" ]; then
-                echo "$version|$url|$checksum"
-                return 0
-            fi
-            continue
+        # Download and parse ms.msver file
+        local temp_msver="/tmp/ms_msver_$$.txt"
+        if ! download_file "$msver_url" "$temp_msver"; then
+            echo "${RED}Error: Cannot download ms.msver from $msver_url${NC}"
+            exit 1
         fi
         
-        # Store dev version separately
-        if [ "$version" = "dev" ]; then
-            dev_version="$version"
-            dev_url="$url"
-            dev_checksum="$checksum"
-            # Skip dev versions unless explicitly allowed
-            if [ "$ALLOW_DEV" = false ]; then
+        # Parse version information from .msver file
+        while IFS='|' read -r entry_type version url checksum; do
+            [ "$entry_type" = "version" ] || continue
+            
+            # If specific version requested, match exactly
+            if [ -n "$REQUESTED_VERSION" ]; then
+                if [ "$version" = "$REQUESTED_VERSION" ]; then
+                    echo "$version|$url|$checksum"
+                    rm -f "$temp_msver"
+                    return 0
+                fi
                 continue
             fi
-        fi
-        
-        # Find highest version (skip dev in version comparison)
-        if [ "$version" != "dev" ]; then
-            if [ -z "$best_version" ]; then
-                best_version="$version"
-                best_url="$url" 
-                best_checksum="$checksum"
-            else
-                if compare_versions "$version" "$best_version"; then
+            
+            # Store dev version separately
+            if [ "$version" = "dev" ]; then
+                dev_version="$version"
+                dev_url="$url"
+                dev_checksum="$checksum"
+                # Skip dev versions unless explicitly allowed
+                if [ "$ALLOW_DEV" = false ]; then
+                    continue
+                fi
+            fi
+            
+            # Find highest version (skip dev in version comparison)
+            if [ "$version" != "dev" ]; then
+                if [ -z "$best_version" ]; then
                     best_version="$version"
-                    best_url="$url"
+                    best_url="$url" 
+                    best_checksum="$checksum"
+                else
+                    if compare_versions "$version" "$best_version"; then
+                        best_version="$version"
+                        best_url="$url"
+                        best_checksum="$checksum"
+                    fi
+                fi
+            elif [ "$ALLOW_DEV" = true ]; then
+                # If dev is allowed, it can be the best version
+                if [ -z "$best_version" ]; then
+                    best_version="$version"
+                    best_url="$url" 
                     best_checksum="$checksum"
                 fi
             fi
-        elif [ "$ALLOW_DEV" = true ]; then
-            # If dev is allowed, it can be the best version
-            if [ -z "$best_version" ]; then
-                best_version="$version"
-                best_url="$url" 
-                best_checksum="$checksum"
-            fi
-        fi
+        done < "$temp_msver"
+        
+        rm -f "$temp_msver"
+        break  # We found ms command, no need to continue
     done < "$temp_registry"
     
     # If no suitable version found but dev version exists, use dev
