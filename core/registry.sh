@@ -266,7 +266,7 @@ get_all_commands() {
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" | grep -v "^config:" | grep -v "^$" | while IFS=':' read -r cmd script desc category version checksum; do
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" | grep -v "^config:" | grep -v "^$" | while IFS=':' read -r cmd script desc category; do
             [ -n "$cmd" ] && echo "$cmd" >> "$temp_commands"
         done
     fi
@@ -280,7 +280,7 @@ get_all_commands() {
             
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                grep "^command|" "$reg_file" | while IFS='|' read -r prefix cmd script desc category version checksum; do
+                grep "^command|" "$reg_file" | while IFS='|' read -r prefix cmd script desc category; do
                     if [ -n "$cmd" ] && ! grep -q "^$cmd$" "$temp_commands" 2>/dev/null; then
                         echo "$cmd" >> "$temp_commands"
                     fi
@@ -400,16 +400,13 @@ search_commands() {
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
-        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" | while IFS='|' read -r prefix cmd script desc category version checksum; do
+        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" | while IFS='|' read -r prefix cmd script desc category; do
             [ -z "$cmd" ] && continue
             
             if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
-                # Show version if available (6-field format), otherwise show old format
-                if [ -n "$version" ] && [ "$version" != "" ]; then
-                    printf "  %-12s %s [%s] (v%s)\n" "$cmd" "$desc" "$category" "$version" >> "$temp_results"
-                else
-                    printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
-                fi
+                # In 2-tier system, version info is in .msver file pointed by $script
+                # For now, just show basic info without version
+                printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
             fi
         done
     fi
@@ -423,16 +420,12 @@ search_commands() {
             
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                grep "^command|" "$reg_file" | while IFS='|' read -r prefix cmd script desc category version checksum; do
+                grep "^command|" "$reg_file" | while IFS='|' read -r prefix cmd script desc category; do
                     [ -z "$cmd" ] && continue
                     
                     if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
-                        # Show version if available (6-field format), otherwise show old format
-                        if [ -n "$version" ] && [ "$version" != "" ]; then
-                            printf "  %-12s %s [%s] (v%s)\n" "$cmd" "$desc" "$category" "$version" >> "$temp_results"
-                        else
-                            printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
-                        fi
+                        # In 2-tier system, just show basic info without version
+                        printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
                     fi
                 done
             fi
@@ -541,13 +534,12 @@ get_command_info() {
         return 1
     fi
     
-    # Parse command metadata: command|name|msver_url|description|category|msver_checksum
+    # Parse command metadata: command|name|msver_url|description|category
     local prefix=$(echo "$cmd_meta" | cut -d'|' -f1)
     local name=$(echo "$cmd_meta" | cut -d'|' -f2)
     local msver_url=$(echo "$cmd_meta" | cut -d'|' -f3)
     local description=$(echo "$cmd_meta" | cut -d'|' -f4)
     local category=$(echo "$cmd_meta" | cut -d'|' -f5)
-    local msver_checksum=$(echo "$cmd_meta" | cut -d'|' -f6)
     
     # Now get version info from .msver file
     local version_info=""
@@ -556,7 +548,7 @@ get_command_info() {
     fi
     
     # Return combined info
-    echo "command_meta|$name|$description|$category|$msver_url|$msver_checksum"
+    echo "command_meta|$name|$description|$category|$msver_url"
     echo "$version_info"
 }
 

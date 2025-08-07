@@ -1,16 +1,16 @@
 # Magic Scripts Master Registry (2-Tier System)
-# Format: command|name|msver_url|description|category|msver_checksum
+# Format: command|name|msver_url|description|category
 # 
 # Each command now points to its own .msver file containing:
 # - Version information (version|ver|url|checksum)
 # - Configuration keys (config|key|default|desc|category|scripts)
 
 # Core Commands - pointing to individual .msver files
-command|ms|https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msver|Magic Scripts main interface|core|dev
-command|gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/gigen.msver|.gitignore template generator|development|dev
-command|licgen|https://raw.githubusercontent.com/magic-scripts/licgen/main/licgen.msver|License generator for various licenses|development|dev
-command|pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/main/pgadduser.msver|PostgreSQL user and database setup|database|dev
-command|dcwinit|https://raw.githubusercontent.com/magic-scripts/dcwinit/main/dcwinit.msver|Docker Compose wireframe generator|docker|dev
-command|dockergen|https://raw.githubusercontent.com/magic-scripts/dockergen/main/dockergen.msver|Optimized Dockerfile generator for various runtimes|docker|dev
-command|projinit|https://raw.githubusercontent.com/magic-scripts/projinit/main/projinit.msver|Project initializer for various frameworks|development|dev
-command|mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/mschecksum.msver|SHA256 checksum calculator for Magic Scripts|utilities|dev
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msver|Magic Scripts main interface|core
+command|gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/gigen.msver|.gitignore template generator|development
+command|licgen|https://raw.githubusercontent.com/magic-scripts/licgen/main/licgen.msver|License generator for various licenses|development
+command|pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/main/pgadduser.msver|PostgreSQL user and database setup|database
+command|dcwinit|https://raw.githubusercontent.com/magic-scripts/dcwinit/main/dcwinit.msver|Docker Compose wireframe generator|docker
+command|dockergen|https://raw.githubusercontent.com/magic-scripts/dockergen/main/dockergen.msver|Optimized Dockerfile generator for various runtimes|docker
+command|projinit|https://raw.githubusercontent.com/magic-scripts/projinit/main/projinit.msver|Project initializer for various frameworks|development
+command|mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/mschecksum.msver|SHA256 checksum calculator for Magic Scripts|utilities
