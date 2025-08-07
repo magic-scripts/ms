@@ -11,7 +11,7 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
-TEMP_DIR="/tmp/magicscripts-$$"
+TEMP_DIR="$HOME/.cache/magicscripts-$$"
 
 # URLs
 REPO_URL="https://github.com/magic-scripts/ms"
@@ -119,7 +119,7 @@ find_best_ms_version() {
         [ "$name" = "ms" ] || continue
         
         # Download and parse ms.msver file
-        local temp_msver="/tmp/ms_msver_$$.txt"
+        local temp_msver="$TEMP_DIR/ms_msver_$$.txt"
         if ! download_file "$msver_url" "$temp_msver"; then
             echo "${RED}Error: Cannot download ms.msver from $msver_url${NC}"
             exit 1
