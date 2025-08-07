@@ -1137,7 +1137,7 @@ handle_uninstall() {
             
             # Use uninstall.sh for ms uninstall
             local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
-            local temp_uninstall=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
+            local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
             
             printf "    Downloading uninstall script... "
             if command -v curl >/dev/null 2>&1; then
@@ -1621,86 +1621,77 @@ handle_reinstall() {
 
 handle_ms_force_reinstall() {
     echo "${BLUE}Force reinstalling Magic Scripts...${NC}"
+    echo ""
     
-    local MAGIC_DIR="$HOME/.local/share/magicscripts"
-    local INSTALL_DIR="$HOME/.local/bin/ms"
+    # Step 1: Run uninstall script
+    echo "${YELLOW}Step 1: Uninstalling current Magic Scripts...${NC}"
+    local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
+    local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
-    # Get ms URI from registry
-    local ms_uri=""
-    if command -v get_script_info >/dev/null 2>&1; then
-        local ms_info=$(get_script_info "ms" 2>/dev/null)
-        if [ -n "$ms_info" ]; then
-            ms_uri=$(echo "$ms_info" | cut -d'|' -f3)
-        fi
-    fi
-    
-    # Fallback to hardcoded URL
-    if [ -z "$ms_uri" ]; then
-        ms_uri="https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.sh"
-    fi
-    
-    # Download ms.sh
-    local temp_file=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
-    printf "  Downloading ms.sh... "
+    printf "  Downloading uninstall script... "
     if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$ms_uri" -o "$temp_file"; then
+        if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall"; then
             printf "${GREEN}done${NC}\n"
         else
             printf "${RED}failed${NC}\n"
-            rm -f "$temp_file"
+            rm -f "$temp_uninstall"
             return 1
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if wget -q "$ms_uri" -O "$temp_file"; then
+        if wget -q "$uninstall_script_url" -O "$temp_uninstall"; then
             printf "${GREEN}done${NC}\n"
         else
             printf "${RED}failed${NC}\n"
-            rm -f "$temp_file"
+            rm -f "$temp_uninstall"
             return 1
         fi
     else
-        printf "${RED}failed (no curl/wget)${NC}\n"
+        echo "${RED}Error: curl or wget required${NC}"
         return 1
     fi
     
-    # Replace the existing ms.sh
-    printf "  Installing new version... "
-    mkdir -p "$MAGIC_DIR/scripts"
-    if cp "$temp_file" "$MAGIC_DIR/scripts/ms.sh" && chmod 755 "$MAGIC_DIR/scripts/ms.sh"; then
-        printf "${GREEN}done${NC}\n"
+    chmod +x "$temp_uninstall"
+    echo "  Running uninstaller..."
+    # Run uninstall script with automatic 'yes' response
+    echo "yes" | sh "$temp_uninstall" >/dev/null 2>&1
+    rm -f "$temp_uninstall"
+    
+    echo ""
+    echo "${YELLOW}Step 2: Installing fresh Magic Scripts...${NC}"
+    
+    # Step 2: Run install script
+    local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh"
+    local temp_install=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    printf "  Downloading install script... "
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsSL "$install_script_url" -o "$temp_install"; then
+            printf "${GREEN}done${NC}\n"
+        else
+            printf "${RED}failed${NC}\n"
+            rm -f "$temp_install"
+            return 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -q "$install_script_url" -O "$temp_install"; then
+            printf "${GREEN}done${NC}\n"
+        else
+            printf "${RED}failed${NC}\n"
+            rm -f "$temp_install"
+            return 1
+        fi
     else
-        printf "${RED}failed${NC}\n"
-        rm -f "$temp_file"
+        echo "${RED}Error: curl or wget required${NC}"
         return 1
     fi
     
-    # Calculate new checksum and update metadata
-    printf "  Updating metadata... "
-    local new_checksum=$(calculate_file_checksum "$MAGIC_DIR/scripts/ms.sh")
-    local registry_url=""
+    chmod +x "$temp_install"
+    echo "  Running installer..."
+    # Run install script silently
+    sh "$temp_install" >/dev/null 2>&1
+    rm -f "$temp_install"
     
-    # Get registry URL from existing metadata or reglist
-    local ms_meta="$HOME/.local/share/magicscripts/installed/ms.msmeta"
-    if [ -f "$ms_meta" ]; then
-        registry_url=$(grep "^registry_url=" "$ms_meta" | cut -d'=' -f2-)
-    fi
-    
-    if [ -z "$registry_url" ]; then
-        registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msreg"
-    fi
-    
-    if [ "$new_checksum" != "unknown" ]; then
-        # Update ms metadata
-        set_installation_metadata "ms" "0.0.1" "ms" \
-            "$registry_url" \
-            "$new_checksum" "$MAGIC_DIR/scripts/ms.sh"
-        printf "${GREEN}done${NC}\n"
-    else
-        printf "${YELLOW}warning (checksum failed)${NC}\n"
-    fi
-    
-    # Clean up
-    rm -f "$temp_file"
+    echo ""
+    echo "${GREEN}✅ Magic Scripts reinstallation completed!${NC}"
     
     return 0
 }
