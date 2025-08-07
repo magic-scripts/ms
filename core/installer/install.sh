@@ -36,7 +36,7 @@ verify_url() {
     local url="$1"
     
     if check_command curl; then
-        curl -fsSI "$url" -o /dev/null 2>/dev/null
+        curl -fsSI "$url" > /dev/null 2>/dev/null
     elif check_command wget; then
         wget -q --spider "$url" 2>/dev/null
     else
@@ -48,8 +48,12 @@ download_file() {
     local url="$1"
     local output="$2"
     
+    # Create directory if it doesn't exist
+    mkdir -p "$(dirname "$output")"
+    
     if check_command curl; then
-        curl -fsSL "$url" -o "$output"
+        # Use output redirection to avoid curl write issues
+        curl -fsSL "$url" > "$output"
     elif check_command wget; then
         wget -q "$url" -O "$output"
     else
