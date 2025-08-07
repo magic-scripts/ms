@@ -361,7 +361,7 @@ Use 'remove' first if you want to update it
 | `dcwinit` | Docker Compose wireframe generator | [manual/dcwinit.md](manual/dcwinit.md) |
 | `dockergen` | Optimized Dockerfile generator for various runtimes | [manual/dockergen.md](manual/dockergen.md) |
 | `projinit` | Project initializer for various frameworks | [manual/projinit.md](manual/projinit.md) |
-| `msreg` | Registry management and checksum calculator | [manual/msreg.md](manual/msreg.md) |
+| `mschecksum` | SHA256 checksum calculator | [manual/mschecksum.md](manual/mschecksum.md) |
 
 ## Install Commands
 

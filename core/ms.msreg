@@ -13,4 +13,4 @@ command|pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/deve
 command|dcwinit|https://raw.githubusercontent.com/magic-scripts/dcwinit/develop/dcwinit.msver|Docker Compose wireframe generator|docker|dev
 command|dockergen|https://raw.githubusercontent.com/magic-scripts/dockergen/develop/dockergen.msver|Optimized Dockerfile generator for various runtimes|docker|dev
 command|projinit|https://raw.githubusercontent.com/magic-scripts/projinit/develop/projinit.msver|Project initializer for various frameworks|development|dev
-command|msreg|https://raw.githubusercontent.com/magic-scripts/msreg/develop/msreg.msver|Registry management and checksum calculator|development|dev
+command|mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/develop/mschecksum.msver|SHA256 checksum calculator for Magic Scripts|utilities|dev
