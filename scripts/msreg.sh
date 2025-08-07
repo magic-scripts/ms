@@ -18,7 +18,7 @@ show_help() {
     echo "Magic Scripts Registry Manager"
     echo ""
     echo "Usage:"
-    echo "  ${CYAN}$SCRIPT_NAME -f <registry_file> add <command>:<version> <uri>${NC}"
+    echo "  ${CYAN}$SCRIPT_NAME -f <registry_file> add <command>:<version> <uri> [--dev-checksum]${NC}"
     echo "  ${CYAN}$SCRIPT_NAME -f <registry_file> remove <command>:<version>${NC}"
     echo "  ${CYAN}$SCRIPT_NAME -f <registry_file> config add <key> <default> <desc> <category> <scripts>${NC}"
     echo "  ${CYAN}$SCRIPT_NAME -f <registry_file> config remove <key> [command]${NC}"
@@ -27,15 +27,19 @@ show_help() {
     echo "  ${CYAN}$SCRIPT_NAME --version, -v${NC}"
     echo "  ${CYAN}$SCRIPT_NAME --help, -h${NC}"
     echo ""
+    echo "Options:"
+    echo "  ${CYAN}--dev-checksum${NC}    Use 'dev' checksum (skips download and verification)"
+    echo ""
     echo "Examples:"
     echo "  ${CYAN}$SCRIPT_NAME -f core/ms.msreg add gigen:2.1.0 https://example.com/gigen.sh${NC}"
+    echo "  ${CYAN}$SCRIPT_NAME -f core/ms.msreg add gigen:dev https://example.com/gigen.sh --dev-checksum${NC}"
     echo "  ${CYAN}$SCRIPT_NAME -f core/ms.msreg remove gigen:2.1.0${NC}"
     echo "  ${CYAN}$SCRIPT_NAME -f core/ms.msreg config add AUTHOR_NAME \"\" \"Your name\" global \"gigen,licgen\"${NC}"
     echo "  ${CYAN}$SCRIPT_NAME checksum ./scripts/gigen.sh${NC}"
     echo ""
     echo "Registry format:"
-    echo "  command:script_path:description:category:version:checksum"
-    echo "  config:key:default_value:description:category:scripts"
+    echo "  command|name|script_uri|description|category|version|checksum"
+    echo "  config|key|default_value|description|category|scripts"
 }
 
 show_version() {
@@ -145,10 +149,11 @@ add_command() {
     local reg_file="$1"
     local cmd_version="$2"
     local uri="$3"
+    local use_dev_checksum="$4"
     
     if [ -z "$cmd_version" ] || [ -z "$uri" ]; then
         echo "${RED}Error: Both command:version and URI are required${NC}" >&2
-        echo "Usage: $SCRIPT_NAME -f <file> add <command>:<version> <uri>" >&2
+        echo "Usage: $SCRIPT_NAME -f <file> add <command>:<version> <uri> [--dev-checksum]" >&2
         return 1
     fi
     
@@ -170,32 +175,39 @@ add_command() {
         return 1
     fi
     
-    # Download and calculate checksum
-    local temp_file="/tmp/msreg_download_$$"
-    echo "Downloading $uri..."
-    
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$uri" -o "$temp_file" 2>/dev/null
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q "$uri" -O "$temp_file" 2>/dev/null
+    local checksum
+    if [ "$use_dev_checksum" = "--dev-checksum" ]; then
+        # Use dev checksum without downloading
+        checksum="dev"
+        echo "Using dev checksum (skipping download and verification)"
     else
-        echo "${RED}Error: curl or wget required for downloading${NC}" >&2
-        return 1
-    fi
-    
-    if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
-        echo "${RED}Error: Failed to download file from $uri${NC}" >&2
+        # Download and calculate checksum
+        local temp_file="/tmp/msreg_download_$$"
+        echo "Downloading $uri..."
+        
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$uri" -o "$temp_file" 2>/dev/null
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q "$uri" -O "$temp_file" 2>/dev/null
+        else
+            echo "${RED}Error: curl or wget required for downloading${NC}" >&2
+            return 1
+        fi
+        
+        if [ ! -f "$temp_file" ] || [ ! -s "$temp_file" ]; then
+            echo "${RED}Error: Failed to download file from $uri${NC}" >&2
+            rm -f "$temp_file"
+            return 1
+        fi
+        
+        checksum=$(calculate_checksum "$temp_file")
+        if [ $? -ne 0 ]; then
+            rm -f "$temp_file"
+            return 1
+        fi
+        
         rm -f "$temp_file"
-        return 1
     fi
-    
-    local checksum=$(calculate_checksum "$temp_file")
-    if [ $? -ne 0 ]; then
-        rm -f "$temp_file"
-        return 1
-    fi
-    
-    rm -f "$temp_file"
     
     # Prompt for missing information
     printf "Description: "
@@ -469,7 +481,16 @@ done
 # Handle commands that require registry file
 case "$command" in
     add)
-        add_command "$registry_file" "$@"
+        cmd_version="$1"
+        uri="$2"
+        dev_checksum=""
+        
+        # Check for --dev-checksum flag
+        if [ "$3" = "--dev-checksum" ]; then
+            dev_checksum="--dev-checksum"
+        fi
+        
+        add_command "$registry_file" "$cmd_version" "$uri" "$dev_checksum"
         ;;
     remove)
         remove_command "$registry_file" "$1"

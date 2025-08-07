@@ -416,7 +416,19 @@ install_commands_with_detection() {
     local failed_count=0
     
     for cmd in "${commands[@]}"; do
-        if [ "$cmd" = "ms" ]; then
+        # Parse command:version format
+        local base_cmd="$cmd"
+        local requested_version=""
+        if echo "$cmd" | grep -q ':'; then
+            base_cmd=$(echo "$cmd" | cut -d':' -f1)
+            requested_version=$(echo "$cmd" | cut -d':' -f2)
+            # Convert 'latest' to empty (means get highest version)
+            if [ "$requested_version" = "latest" ]; then
+                requested_version=""
+            fi
+        fi
+        
+        if [ "$base_cmd" = "ms" ]; then
             printf "  Installing ${CYAN}%s${NC}... " "$cmd"
             echo "${YELLOW}already installed${NC}"
             echo "  Use ${CYAN}ms reinstall ms${NC} to reinstall"
@@ -433,7 +445,19 @@ install_commands_with_detection() {
             for registry_name in $registries_list; do
                 if command -v get_registry_commands >/dev/null 2>&1; then
                     local registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
-                    local cmd_info=$(echo "$registry_commands" | grep "^command|$cmd|")
+                    local cmd_info=""
+                    
+                    if [ -n "$requested_version" ]; then
+                        # Look for specific version
+                        cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|.*|.*|$requested_version|")
+                    else
+                        # Look for any version of the command, prioritize non-dev versions
+                        cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|" | grep -v "|dev|" | head -1)
+                        # If no non-dev version found, use dev version
+                        if [ -z "$cmd_info" ]; then
+                            cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|.*|dev|" | head -1)
+                        fi
+                    fi
                     
                     if [ -n "$cmd_info" ]; then
                         found_registries+=("$registry_name")
@@ -445,20 +469,38 @@ install_commands_with_detection() {
         
         # Handle installation based on what we found
         if [ ${#found_registries[@]} -eq 0 ]; then
-            printf "  Installing ${CYAN}%s${NC}... " "$cmd"
-            echo "${RED}not found in any registry${NC}"
+            printf "  Installing ${CYAN}%s${NC}... " "$base_cmd"
+            if [ -n "$requested_version" ]; then
+                echo "${RED}version $requested_version not found in any registry${NC}"
+            else
+                echo "${RED}not found in any registry${NC}"
+            fi
             failed_count=$((failed_count + 1))
             continue
         elif [ ${#found_registries[@]} -eq 1 ]; then
             # Single registry found
             local target_registry="${found_registries[0]}"
             local target_info="${registry_info[0]}"
+            local found_version=$(echo "$target_info" | cut -d'|' -f5)
             
-            printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$target_registry"
+            printf "  Installing ${CYAN}%s${NC}" "$base_cmd"
+            if [ -n "$requested_version" ] && [ "$requested_version" != "latest" ]; then
+                printf ":${CYAN}%s${NC}" "$requested_version"
+            elif [ "$found_version" != "" ]; then
+                printf ":${CYAN}%s${NC}" "$found_version"
+            fi
+            printf " from ${YELLOW}%s${NC}... " "$target_registry"
+            
+            # Show warning if installing dev version without explicit request
+            if [ "$found_version" = "dev" ] && [ -z "$requested_version" ]; then
+                echo ""
+                echo "    ${YELLOW}⚠️  Installing development version (no stable release available)${NC}"
+                printf "    "
+            fi
             
             local file=$(echo "$target_info" | cut -d'|' -f3)
             local install_result
-            install_script "$cmd" "$file" "$target_registry"
+            install_script "$base_cmd" "$file" "$target_registry" "$found_version"
             install_result=$?
             
             case $install_result in
@@ -489,12 +531,26 @@ install_commands_with_detection() {
                 local selected_index=$((choice - 1))
                 local target_registry="${found_registries[$selected_index]}"
                 local target_info="${registry_info[$selected_index]}"
+                local found_version=$(echo "$target_info" | cut -d'|' -f5)
                 
-                printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$target_registry"
+                printf "  Installing ${CYAN}%s${NC}" "$base_cmd"
+                if [ -n "$requested_version" ] && [ "$requested_version" != "latest" ]; then
+                    printf ":${CYAN}%s${NC}" "$requested_version"
+                elif [ "$found_version" != "" ]; then
+                    printf ":${CYAN}%s${NC}" "$found_version"
+                fi
+                printf " from ${YELLOW}%s${NC}... " "$target_registry"
+                
+                # Show warning if installing dev version without explicit request
+                if [ "$found_version" = "dev" ] && [ -z "$requested_version" ]; then
+                    echo ""
+                    echo "    ${YELLOW}⚠️  Installing development version (no stable release available)${NC}"
+                    printf "    "
+                fi
                 
                 local file=$(echo "$target_info" | cut -d'|' -f3)
                 local install_result
-                install_script "$cmd" "$file" "$target_registry"
+                install_script "$base_cmd" "$file" "$target_registry" "$found_version"
                 install_result=$?
                 
                 case $install_result in
@@ -658,7 +714,14 @@ install_script() {
     local cmd="$1"
     local script_uri="$2"  # Now expects full URI instead of relative path
     local registry_name="$3"  # Registry name that provided the command
-    local force_flag="$4"     # Optional: "force" to force reinstall
+    local version="$4"        # Version being installed
+    local force_flag="$5"     # Optional: "force" to force reinstall
+    
+    # Handle legacy calls without version parameter
+    if [ "$4" = "force" ]; then
+        version=""
+        force_flag="force"
+    fi
     
     # Install directly to ~/.local/bin for PATH compatibility
     local INSTALL_DIR="$HOME/.local/bin/ms"
@@ -794,6 +857,9 @@ EOF
             echo "  Expected: $expected, Got: $actual" >&2
             echo "  The installation may be corrupted." >&2
             return 1
+            ;;
+        5)
+            # Dev version - already printed message in verify_command_checksum
             ;;
         2|3|4)
             echo "${YELLOW}Warning: Could not verify checksum for $cmd${NC}" >&2
@@ -1076,6 +1142,12 @@ verify_command_checksum() {
     
     if [ "$expected_checksum" = "unknown" ] || [ "$script_path" = "unknown" ]; then
         return 2  # Cannot verify - no metadata
+    fi
+    
+    # Skip checksum verification for dev versions
+    if [ "$expected_checksum" = "dev" ]; then
+        echo "${BLUE}ℹ Checksum verification skipped (development resource)${NC}" >&2
+        return 5  # Dev version - no verification needed
     fi
     
     if [ ! -f "$script_path" ]; then
@@ -1683,6 +1755,9 @@ handle_doctor() {
                         ;;
                     4)
                         echo "  ⚠️  $cmd: Cannot calculate checksum"
+                        ;;
+                    5)
+                        echo "  ℹ️  $cmd: Dev version (checksum not verified)"
                         ;;
                 esac
             else

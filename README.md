@@ -32,10 +32,16 @@ A comprehensive collection of developer automation tools for streamlined project
 ### Installation
 
 ```bash
-# Install via curl (recommended)
+# Install latest stable version (recommended)
 curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh
 
-# Or via wget
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v 0.0.1
+
+# Install development version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v dev -d
+
+# Using wget instead of curl
 wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh
 ```
 
@@ -347,133 +353,28 @@ Use 'remove' first if you want to update it
 
 ## 🛠️ Available Commands
 
-### GitIgnore Generator (`gigen`)
+| Command | Description | Manual |
+|---------|-------------|---------|
+| `gigen` | .gitignore template generator | [manual/gigen.md](manual/gigen.md) |
+| `licgen` | License generator for various licenses | [manual/licgen.md](manual/licgen.md) |
+| `pgadduser` | PostgreSQL user and database setup | [manual/pgadduser.md](manual/pgadduser.md) |
+| `dcwinit` | Docker Compose wireframe generator | [manual/dcwinit.md](manual/dcwinit.md) |
+| `dockergen` | Optimized Dockerfile generator for various runtimes | [manual/dockergen.md](manual/dockergen.md) |
+| `projinit` | Project initializer for various frameworks | [manual/projinit.md](manual/projinit.md) |
+| `msreg` | Registry management and checksum calculator | [manual/msreg.md](manual/msreg.md) |
 
-Generate and manage `.gitignore` files with template support.
-
-```bash
-# Initialize with basic templates
-gigen init
-
-# Add templates
-gigen add node python
-
-# Remove templates
-gigen remove python
-
-# Update templates to latest version
-gigen update
-
-# Whitelist patterns
-gigen allow "*.log" ".env"
-
-# Remove from whitelist
-gigen disallow "*.log"
-
-# Show current status
-gigen status
-```
-
-**Supported Templates:**
-`node`, `python`, `go`, `rust`, `java`, `cpp`, `macos`, `linux`, `windows`, `vscode`, `idea`, `ai`, `ms`
-
-### License Generator (`licgen`)
-
-Generate license files for various open source licenses.
+## Install Commands
 
 ```bash
-# Generate MIT license
-licgen mit
+# Install all commands from default registry  
+ms install -r ms
 
-# Generate with custom author
-licgen -a "John Doe" apache
+# Install specific commands
+ms install gigen licgen projinit
 
-# Generate to custom file
-licgen -o LICENSE.txt gpl3
+# Browse available commands
+ms search
 ```
-
-**License Types:**
-`mit`, `apache`, `gpl3`, `bsd3`, `bsd2`, `unlicense`, `lgpl`, `mpl`, `cc0`, `agpl`
-
-### PostgreSQL User Manager (`pgadduser`)
-
-Create PostgreSQL users and databases with proper permissions.
-
-```bash
-# Configure database connection
-ms config set POSTGRES_HOST "production.db.com"
-ms config set POSTGRES_ADMIN "admin"
-ms config set POSTGRES_PASSWORD "admin_password"
-
-# Create user with database
-pgadduser -u john -p pass123
-pgadduser -u john -p pass123 -d myapp_db
-```
-
-### Docker Compose Initializer (`dcwinit`)
-
-Generate Docker Compose configurations for development.
-
-```bash
-# Basic web + database setup
-dcwinit
-
-# Custom services and port
-dcwinit -s "web,db,redis" -p 8080
-
-# With custom network
-dcwinit --network --network-name mynet
-```
-
-### Dockerfile Generator (`dockergen`)
-
-Generate optimized Dockerfiles for various runtimes.
-
-```bash
-# Generate for specific runtime
-dockergen node
-dockergen python
-dockergen go
-```
-
-### Project Initializer (`projinit`)
-
-Initialize new projects with common frameworks.
-
-```bash
-# Initialize various project types
-projinit node myapp
-projinit react frontend
-projinit python myservice
-projinit express api
-```
-
-**Project Types:**
-`node`, `python`, `go`, `react`, `next`, `express`, `fastapi`
-
-### Registry Manager (`msreg`)
-
-Manage Magic Scripts registry files with automatic checksum calculation.
-
-```bash
-# Calculate file checksum
-msreg checksum scripts/my-script.sh
-
-# Add script to registry  
-msreg add myscript:1.0.0 https://example.com/myscript.sh
-
-# Remove script from registry
-msreg remove myscript:1.0.0
-
-# Show version
-msreg --version
-```
-
-**Features:**
-- Automatic SHA256 checksum calculation
-- Duplicate prevention (command:version combinations)
-- Interactive prompts for metadata
-- Registry file validation
 
 ## 🔧 Development
 
@@ -558,6 +459,76 @@ echo "Running with MY_VALUE: $MY_VALUE"
 - Registry URLs must be valid HTTP/HTTPS
 - Downloaded registries are validated before use
 - Local cache prevents repeated downloads
+
+## 🌿 Branch Strategy
+
+Magic Scripts follows a structured branching model to ensure stable releases and smooth development workflow:
+
+### **Branch Structure**
+
+#### `main` - Latest Release
+- Contains the **latest stable release**
+- Used for production installations
+- All releases are tagged (e.g., `v0.0.1`, `v0.0.2`)
+- Protected branch - only accepts merges from `release/*` branches
+
+#### `develop` - Development Branch  
+- Contains **current development work**
+- Features and fixes are merged here first
+- Used for dev version installations (`install.sh -v dev -d`)
+- Always ahead of `main` (next release candidate)
+
+#### `release/v0.0.0` - Release Snapshots
+- **Immutable snapshots** of deployed versions
+- Created when deploying to production
+- Format: `release/v{major}.{minor}.{patch}`
+- Used for version-specific installations and rollbacks
+
+### **Registry Branch Mapping**
+
+```bash
+# Latest stable release (main branch)
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.sh|...|0.0.2|checksum
+
+# Development version (develop branch)  
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/develop/core/ms.sh|...|dev|dev
+
+# Specific version snapshot (release branch)
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/release/v0.0.1/core/ms.sh|...|0.0.1|checksum
+```
+
+### **Version Installation Examples**
+
+```bash
+# Install latest stable version (from main branch)
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh
+
+# Install development version (from develop branch)
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v dev -d
+
+# Install specific version (from release branch)
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v 0.0.1
+
+# Alternative installation methods
+wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v 0.0.2
+```
+
+### **Development Workflow**
+
+1. **Feature Development**: Create feature branches from `develop`
+2. **Integration**: Merge features into `develop`
+3. **Release Preparation**: Create release branch from `develop`
+4. **Release**: Merge release branch to `main` and tag
+5. **Snapshot**: Create `release/v0.0.0` branch for the deployed version
+6. **Rollback Support**: Reference specific `release/v0.0.0` for rollbacks
+
+### **Benefits**
+
+- ✅ **Stable Releases**: `main` always represents latest stable version
+- ✅ **Development Testing**: `develop` allows testing unreleased features
+- ✅ **Version Rollback**: `release/*` branches enable precise rollbacks
+- ✅ **Clear History**: Each version has its own immutable snapshot
+- ✅ **Hotfix Support**: Critical fixes can target specific release branches
 
 ## 🐛 Troubleshooting
 
@@ -662,22 +633,6 @@ When creating or updating scripts, follow these guidelines:
    - Test integration with Magic Scripts system
    - Verify checksum matches: `msreg checksum scripts/yourscript.sh`
 
-### Repository Structure Considerations
-
-**Current approach (Monorepo):**
-- ✅ Unified version management (0.0.1 for all scripts)
-- ✅ Simple registry updates
-- ✅ Integrated development workflow
-- ❌ All scripts share same version
-
-**Alternative approach (Separate repositories):**
-- ✅ Independent versioning per script
-- ✅ Focused development and releases
-- ✅ Independent CI/CD pipelines
-- ❌ Complex registry management
-- ❌ Cross-script dependency management
-
-**Recommendation:** Continue with monorepo approach during initial development, consider separation as scripts mature and require independent versioning.
 
 ## 📝 License
 
@@ -685,79 +640,28 @@ MIT License - see LICENSE file for details.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Add your script to `scripts/` directory with proper version info:
-   ```bash
-   VERSION="0.0.1"
-   # Add --version/-v flag handling
-   ```
-4. Calculate checksum and update registry:
-   ```bash
-   msreg checksum scripts/your-script.sh
-   # Update core/ms.msreg with new entry including checksum
-   ```
-5. Test with the Magic Scripts system:
-   ```bash
-   ms install yourcommand
-   ms versions yourcommand
-   yourcommand --version
-   ```
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+Contributions are welcome! Please:
 
-## 📊 Architecture
+1. Fork the repository and create a feature branch from `develop`
+2. Follow existing code patterns and include proper version info
+3. Test your changes and update documentation
+4. Submit a pull request targeting the `develop` branch
 
-```
-magicscripts/
-├── core/
-│   ├── config.sh        # Configuration system
-│   ├── registry.sh      # Registry management
-│   ├── ms.sh           # Main CLI interface
-│   ├── ms.msreg        # Default registry
-│   └── installer/      # Installation system
-│       ├── install.sh  # Installation script
-│       └── uninstall.sh # Uninstallation script
-├── scripts/
-│   └── *.sh            # Individual command scripts
-└── README.md           # This file
-```
+For detailed guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Directory Structure (Installed)
+## 📊 Key Directories
 
-```
-~/.local/bin/ms/                    # Executable wrappers
-~/.local/share/magicscripts/        # Core scripts and libraries
-├── scripts/                        # Downloaded scripts
-│   ├── ms.sh                      # Main Magic Scripts interface
-│   └── *.sh                       # Individual command scripts
-├── core/                          # Core system files
-│   ├── config.sh                  # Configuration system
-│   └── registry.sh                # Registry management
-├── installed/                     # Installation metadata
-│   ├── ms.msmeta                  # Magic Scripts metadata
-│   └── *.msmeta                   # Command metadata files
-└── reg/                           # Registry system
-    ├── reglist                    # Registry sources
-    └── *.msreg                    # Downloaded registries
-~/.magicscripts/                    # User configuration
-└── config                         # User config file
-```
+- `~/.local/bin/ms/` - Executable wrappers
+- `~/.local/share/magicscripts/` - Core scripts and libraries  
+- `~/.magicscripts/` - User configuration
 
-## 🌟 Features
+## 🌟 Key Features
 
-- **Smart Installation System**: Automatic duplicate detection and version comparison
-- **Comprehensive Metadata Tracking**: Complete installation history with .msmeta files
-- **URL-based Registry System**: Distribute and manage commands via HTTP/HTTPS
-- **Registry Duplicate Handling**: Interactive selection when commands exist in multiple registries
-- **Unified Configuration**: Single config system for all scripts with security validation
-- **System Health Monitoring**: Built-in doctor command with auto-repair capabilities
-- **Checksum Verification**: SHA256 integrity checks for all installed scripts
-- **Extensible Architecture**: Easy to add new commands and registries
-- **Permission Management**: Robust file permission handling (755 for executables)
-- **No Git Required**: Install and use without cloning repository
-- **Multi-source Support**: Add unlimited custom registries with -r option support
+- **Smart Installation**: Version management, duplicate detection, checksum verification
+- **Unified Configuration**: Single config system for all scripts  
+- **Registry System**: URL-based distribution with multi-source support
+- **Health Monitoring**: Built-in doctor command with auto-repair
+- **No Dependencies**: Install and use without Git or complex setup
 
 ---
 

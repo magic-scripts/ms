@@ -16,6 +16,11 @@ TEMP_DIR="/tmp/magicscripts-$$"
 # URLs
 REPO_URL="https://github.com/magic-scripts/ms"
 RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/main"
+REGISTRY_URL="$RAW_URL/core/ms.msreg"
+
+# Version parameters
+REQUESTED_VERSION=""
+ALLOW_DEV=false
 
 check_command() {
     command -v "$1" >/dev/null 2>&1
@@ -53,6 +58,126 @@ download_file() {
     fi
 }
 
+# Semantic version comparison (returns 0 if v1 > v2, 1 if v1 < v2, 2 if v1 == v2)
+compare_versions() {
+    local v1="$1"
+    local v2="$2"
+    
+    # Handle dev versions
+    if [ "$v1" = "dev" ] && [ "$v2" != "dev" ]; then
+        return 1  # dev is lower than release versions
+    elif [ "$v1" != "dev" ] && [ "$v2" = "dev" ]; then
+        return 0  # release is higher than dev
+    elif [ "$v1" = "dev" ] && [ "$v2" = "dev" ]; then
+        return 2  # equal
+    fi
+    
+    # Parse semantic versions
+    local v1_major=$(echo "$v1" | cut -d'.' -f1)
+    local v1_minor=$(echo "$v1" | cut -d'.' -f2)
+    local v1_patch=$(echo "$v1" | cut -d'.' -f3)
+    
+    local v2_major=$(echo "$v2" | cut -d'.' -f1)
+    local v2_minor=$(echo "$v2" | cut -d'.' -f2)
+    local v2_patch=$(echo "$v2" | cut -d'.' -f3)
+    
+    # Compare major
+    if [ "$v1_major" -gt "$v2_major" ]; then return 0; fi
+    if [ "$v1_major" -lt "$v2_major" ]; then return 1; fi
+    
+    # Compare minor
+    if [ "$v1_minor" -gt "$v2_minor" ]; then return 0; fi
+    if [ "$v1_minor" -lt "$v2_minor" ]; then return 1; fi
+    
+    # Compare patch
+    if [ "$v1_patch" -gt "$v2_patch" ]; then return 0; fi
+    if [ "$v1_patch" -lt "$v2_patch" ]; then return 1; fi
+    
+    return 2  # equal
+}
+
+# Find best version from registry
+find_best_ms_version() {
+    local temp_registry="$TEMP_DIR/ms.msreg"
+    local best_version=""
+    local best_url=""
+    local best_checksum=""
+    local dev_version=""
+    local dev_url=""
+    local dev_checksum=""
+    
+    # Download registry
+    if ! download_file "$REGISTRY_URL" "$temp_registry"; then
+        echo "${RED}Error: Cannot download registry from $REGISTRY_URL${NC}"
+        exit 1
+    fi
+    
+    # Parse registry for ms command versions
+    while IFS='|' read -r cmd_type name url desc category version checksum; do
+        [ "$cmd_type" = "command" ] || continue
+        [ "$name" = "ms" ] || continue
+        
+        # If specific version requested, match exactly
+        if [ -n "$REQUESTED_VERSION" ]; then
+            if [ "$version" = "$REQUESTED_VERSION" ]; then
+                echo "$version|$url|$checksum"
+                return 0
+            fi
+            continue
+        fi
+        
+        # Store dev version separately
+        if [ "$version" = "dev" ]; then
+            dev_version="$version"
+            dev_url="$url"
+            dev_checksum="$checksum"
+            # Skip dev versions unless explicitly allowed
+            if [ "$ALLOW_DEV" = false ]; then
+                continue
+            fi
+        fi
+        
+        # Find highest version (skip dev in version comparison)
+        if [ "$version" != "dev" ]; then
+            if [ -z "$best_version" ]; then
+                best_version="$version"
+                best_url="$url" 
+                best_checksum="$checksum"
+            else
+                if compare_versions "$version" "$best_version"; then
+                    best_version="$version"
+                    best_url="$url"
+                    best_checksum="$checksum"
+                fi
+            fi
+        elif [ "$ALLOW_DEV" = true ]; then
+            # If dev is allowed, it can be the best version
+            if [ -z "$best_version" ]; then
+                best_version="$version"
+                best_url="$url" 
+                best_checksum="$checksum"
+            fi
+        fi
+    done < "$temp_registry"
+    
+    # If no suitable version found but dev version exists, use dev
+    if [ -z "$best_version" ] && [ -n "$dev_version" ]; then
+        echo "$dev_version|$dev_url|$dev_checksum"
+        return 0
+    fi
+    
+    if [ -z "$best_version" ]; then
+        if [ -n "$REQUESTED_VERSION" ]; then
+            echo "${RED}Error: Version $REQUESTED_VERSION not found${NC}"
+        else
+            echo "${RED}Error: No suitable version found${NC}"
+        fi
+        exit 1
+    fi
+    
+    echo "$best_version|$best_url|$best_checksum"
+}
+
 update_shell_config() {
     local shell_config="$1"
     local path_line='export PATH="$HOME/.local/bin/ms:$PATH"'
@@ -71,28 +196,87 @@ update_shell_config() {
     return 0
 }
 
+show_help() {
+    echo "Magic Scripts Installer"
+    echo ""
+    echo "Usage:"
+    echo "  install.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -v, --version VERSION    Install specific version (e.g., 0.0.1, 0.0.2)"
+    echo "  -d, --dev               Allow dev version installation" 
+    echo "  -h, --help              Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  install.sh                     # Install latest stable version"
+    echo "  install.sh -v 0.0.1           # Install specific version"
+    echo "  install.sh -v dev -d           # Install dev version"
+    echo ""
+}
+
+# Parse command line arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -v|--version)
+            REQUESTED_VERSION="$2"
+            shift 2
+            ;;
+        -d|--dev)
+            ALLOW_DEV=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "${RED}Unknown option: $1${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
 echo "========================================="
 echo "           Magic Scripts v0.0.1         "
 echo "       Developer Automation Tools       "
 echo "========================================="
 echo ""
 
-# Verify repository is accessible
-echo "Verifying repository access..."
-if ! verify_url "$RAW_URL/core/config.sh"; then
-    echo "${RED}Error: Cannot access Magic Scripts repository${NC}"
+# Verify registry is accessible
+echo "Verifying registry access..."
+if ! verify_url "$REGISTRY_URL"; then
+    echo "${RED}Error: Cannot access Magic Scripts registry${NC}"
     echo ""
-    echo "The repository may not be available yet."
     echo "Please check:"
     echo "  1. Repository exists at: $REPO_URL"
-    echo "  2. Files are pushed to the main branch"
+    echo "  2. Registry file is available at: $REGISTRY_URL"
     echo "  3. Repository is public or you have access"
     echo ""
-    echo "Try this URL in your browser:"
-    echo "  $RAW_URL/core/config.sh"
     exit 1
 fi
-echo "${GREEN}✓ Repository accessible${NC}"
+echo "${GREEN}✓ Registry accessible${NC}"
+
+# Find best version to install
+echo ""
+echo "Determining version to install..."
+if [ -n "$REQUESTED_VERSION" ]; then
+    echo "Requested version: $REQUESTED_VERSION"
+    if [ "$REQUESTED_VERSION" = "dev" ] && [ "$ALLOW_DEV" = false ]; then
+        echo "${RED}Error: Dev version requested but --dev flag not provided${NC}"
+        echo "Use: install.sh -v dev -d"
+        exit 1
+    fi
+else
+    echo "Finding latest stable version..."
+fi
+
+version_info=$(find_best_ms_version)
+MS_VERSION=$(echo "$version_info" | cut -d'|' -f1)
+MS_URL=$(echo "$version_info" | cut -d'|' -f2)
+MS_CHECKSUM=$(echo "$version_info" | cut -d'|' -f3)
+
+echo "${GREEN}Selected version: $MS_VERSION${NC}"
 echo ""
 
 # Check for existing installation
@@ -111,6 +295,7 @@ echo "Downloading core system..."
 mkdir -p "$MAGIC_DIR/core"
 mkdir -p "$MAGIC_DIR/scripts"
 
+# Download core files (version-independent)
 printf "  Downloading config.sh... "
 if download_file "$RAW_URL/core/config.sh" "$MAGIC_DIR/core/config.sh"; then
     printf "${GREEN}done${NC}\n"
@@ -118,9 +303,6 @@ else
     printf "${RED}failed${NC}\n"
     echo ""
     echo "${RED}Error: Failed to download core configuration file${NC}"
-    echo "URL attempted: $RAW_URL/core/config.sh"
-    echo ""
-    echo "Please ensure the repository has been properly set up."
     exit 1
 fi
 
@@ -135,12 +317,25 @@ fi
 # Registry system will be initialized automatically by ms.sh
 # No need to download registry files during installation
 
-printf "  Downloading ms.sh... "
-if download_file "$RAW_URL/core/ms.sh" "$MAGIC_DIR/scripts/ms.sh"; then
+printf "  Downloading ms.sh (v$MS_VERSION)... "
+if download_file "$MS_URL" "$MAGIC_DIR/scripts/ms.sh"; then
     chmod 755 "$MAGIC_DIR/scripts/ms.sh"
     printf "${GREEN}done${NC}\n"
+    
+    # Verify checksum if not dev version
+    if [ "$MS_VERSION" != "dev" ] && [ "$MS_CHECKSUM" != "dev" ]; then
+        echo "    Verifying checksum..."
+        actual_checksum=$(shasum -a 256 "$MAGIC_DIR/scripts/ms.sh" 2>/dev/null | cut -d' ' -f1 | cut -c1-8 || echo "unknown")
+        if [ "$actual_checksum" != "$MS_CHECKSUM" ]; then
+            echo "${YELLOW}    Warning: Checksum mismatch (expected: $MS_CHECKSUM, got: $actual_checksum)${NC}"
+        else
+            echo "${GREEN}    ✓ Checksum verified${NC}"
+        fi
+    fi
 else
     printf "${RED}failed${NC}\n"
+    echo ""
+    echo "${RED}Error: Failed to download ms.sh from $MS_URL${NC}"
     exit 1
 fi
 
@@ -159,10 +354,10 @@ chmod 755 "$INSTALL_DIR/ms"
 mkdir -p "$MAGIC_DIR/installed"
 cat > "$MAGIC_DIR/installed/ms.msmeta" << EOF
 command=ms
-version=0.0.1
+version=$MS_VERSION
 registry_name=ms
-registry_url=https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msreg
-checksum=a7f93a63
+registry_url=$REGISTRY_URL
+checksum=$MS_CHECKSUM
 installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 script_path=$MAGIC_DIR/scripts/ms.sh
 EOF
