@@ -555,16 +555,30 @@ install_registry_all() {
     local installed_count=0
     local failed_count=0
     
-    echo "$registry_commands" | while IFS='|' read -r prefix cmd file desc category version checksum; do
+    echo "$registry_commands" | while IFS='|' read -r prefix cmd msver_url desc category msver_checksum; do
         [ "$prefix" != "command" ] && continue  # Only process command entries
         [ -z "$cmd" ] && continue
         [ "$cmd" = "ms" ] && continue  # Skip ms core command
         
         printf "  Installing ${CYAN}%s${NC}... " "$cmd"
         
+        # Use get_command_info to get proper script URL from 2-tier system
+        local full_cmd_info=$(get_command_info "$cmd" 2>/dev/null)
+        local version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+        
         local install_result
-        install_script "$cmd" "$file" "$registry_name"
-        install_result=$?
+        if [ -n "$version_info" ]; then
+            # Extract script URL from version info: version|version_name|script_url|checksum
+            local script_url=$(echo "$version_info" | cut -d'|' -f3)
+            local version_name=$(echo "$version_info" | cut -d'|' -f2)
+            
+            install_script "$cmd" "$script_url" "$registry_name" "$version_name"
+            install_result=$?
+        else
+            echo "${RED}no version available${NC}"
+            install_result=1
+            continue
+        fi
         
         case $install_result in
             0)
@@ -613,7 +627,7 @@ install_commands_with_detection() {
             continue
         fi
         
-        # Find command in registries
+        # Find command in registries using 2-tier system
         local found_registries=()
         local registry_info=()
         
@@ -623,23 +637,38 @@ install_commands_with_detection() {
             for registry_name in $registries_list; do
                 if command -v get_registry_commands >/dev/null 2>&1; then
                     local registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
-                    local cmd_info=""
                     
-                    if [ -n "$requested_version" ]; then
-                        # Look for specific version
-                        cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|.*|.*|$requested_version|")
-                    else
-                        # Look for any version of the command, prioritize non-dev versions
-                        cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|" | grep -v "|dev|" | head -1)
-                        # If no non-dev version found, use dev version
-                        if [ -z "$cmd_info" ]; then
-                            cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|.*|dev|" | head -1)
-                        fi
-                    fi
+                    # In 2-tier system, just check if command exists by name in .msreg
+                    local cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|" | head -1)
                     
                     if [ -n "$cmd_info" ]; then
-                        found_registries+=("$registry_name")
-                        registry_info+=("$cmd_info")
+                        # Now check if requested version is available in .msver
+                        local full_cmd_info=$(get_command_info "$base_cmd" "$requested_version" 2>/dev/null)
+                        local version_info=""
+                        
+                        if [ -n "$requested_version" ]; then
+                            # Look for specific version
+                            version_info=$(echo "$full_cmd_info" | grep "^version|$requested_version|")
+                        else
+                            # Look for best available version (non-dev first, then dev)
+                            version_info=$(echo "$full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
+                            if [ -z "$version_info" ]; then
+                                version_info=$(echo "$full_cmd_info" | grep "^version|dev|" | head -1)
+                            fi
+                        fi
+                        
+                        # Only add to found registries if version is available
+                        if [ -n "$version_info" ]; then
+                            found_registries+=("$registry_name")
+                            # Create registry info with version information: command|name|msver_url|desc|category|version
+                            local name=$(echo "$cmd_info" | cut -d'|' -f2)
+                            local msver_url=$(echo "$cmd_info" | cut -d'|' -f3)
+                            local desc=$(echo "$cmd_info" | cut -d'|' -f4)
+                            local category=$(echo "$cmd_info" | cut -d'|' -f5)
+                            local version=$(echo "$version_info" | cut -d'|' -f2)
+                            
+                            registry_info+=("command|$name|$msver_url|$desc|$category|$version")
+                        fi
                     fi
                 fi
             done
@@ -676,10 +705,26 @@ install_commands_with_detection() {
                 printf "    "
             fi
             
-            local file=$(echo "$target_info" | cut -d'|' -f3)
+            # Use get_command_info to get proper script URL from 2-tier system
+            local full_cmd_info=$(get_command_info "$base_cmd" "$found_version" 2>/dev/null)
+            local version_info=$(echo "$full_cmd_info" | grep "^version|$found_version|" | head -1)
+            
+            # If specific version not found, try any available version
+            if [ -z "$version_info" ]; then
+                version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+            fi
+            
             local install_result
-            install_script "$base_cmd" "$file" "$target_registry" "$found_version"
-            install_result=$?
+            if [ -n "$version_info" ]; then
+                # Extract script URL from version info: version|version_name|script_url|checksum
+                local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                
+                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version"
+                install_result=$?
+            else
+                echo "${RED}no version available${NC}"
+                install_result=1
+            fi
             
             case $install_result in
                 0)
@@ -726,10 +771,26 @@ install_commands_with_detection() {
                     printf "    "
                 fi
                 
-                local file=$(echo "$target_info" | cut -d'|' -f3)
+                # Use get_command_info to get proper script URL from 2-tier system
+                local full_cmd_info=$(get_command_info "$base_cmd" "$found_version" 2>/dev/null)
+                local version_info=$(echo "$full_cmd_info" | grep "^version|$found_version|" | head -1)
+                
+                # If specific version not found, try any available version
+                if [ -z "$version_info" ]; then
+                    version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+                fi
+                
                 local install_result
-                install_script "$base_cmd" "$file" "$target_registry" "$found_version"
-                install_result=$?
+                if [ -n "$version_info" ]; then
+                    # Extract script URL from version info: version|version_name|script_url|checksum
+                    local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                    
+                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version"
+                    install_result=$?
+                else
+                    echo "${RED}no version available${NC}"
+                    install_result=1
+                fi
                 
                 case $install_result in
                     0)
@@ -827,18 +888,31 @@ handle_install() {
                 continue
             fi
             
-            # Get command from specific registry
-            if command -v get_registry_commands >/dev/null 2>&1; then
-                local registry_commands=$(get_registry_commands "$specific_registry" 2>/dev/null)
-                local cmd_info=$(echo "$registry_commands" | grep "^command|$cmd|")
+            # Get command from specific registry using 2-tier system
+            if command -v get_command_info >/dev/null 2>&1; then
+                # Use get_command_info to properly handle 2-tier system
+                local full_cmd_info=$(get_command_info "$cmd" 2>/dev/null)
                 
-                if [ -n "$cmd_info" ]; then
-                    printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"
+                if [ -n "$full_cmd_info" ]; then
+                    # Parse command metadata and version info from get_command_info output
+                    local cmd_meta=$(echo "$full_cmd_info" | grep "^command_meta|")
+                    local version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
                     
-                    local file=$(echo "$cmd_info" | cut -d'|' -f3)
-                    local install_result
-                    install_script "$cmd" "$file" "$specific_registry"
-                    install_result=$?
+                    if [ -n "$version_info" ]; then
+                        printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"
+                        
+                        # Extract script URL from version info: version|version_name|script_url|checksum
+                        local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                        local version_name=$(echo "$version_info" | cut -d'|' -f2)
+                        
+                        local install_result
+                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name"
+                        install_result=$?
+                    else
+                        printf "  Installing ${CYAN}%s${NC}... " "$cmd"
+                        echo "${RED}no version available${NC}"
+                        install_result=1
+                    fi
                     
                     case $install_result in
                         0)
