@@ -774,7 +774,7 @@ EOF
     
     # Last fallback to default URL
     if [ "$registry_url" = "unknown" ] || [ -z "$registry_url" ]; then
-        registry_url="https://raw.githubusercontent.com/nulLeeKH/magicscripts/refs/heads/main/core/ms.msreg"
+        registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msreg"
     fi
     
     # Record comprehensive installation metadata
@@ -837,7 +837,7 @@ handle_uninstall() {
             echo "  ${YELLOW}Uninstalling Magic Scripts core...${NC}"
             
             # Use uninstall.sh for ms uninstall
-            local uninstall_script_url="https://raw.githubusercontent.com/nulLeeKH/magicscripts/main/core/installer/uninstall.sh"
+            local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
             local temp_uninstall="/tmp/ms_uninstall_$$.sh"
             
             printf "    Downloading uninstall script... "
@@ -1278,7 +1278,7 @@ handle_ms_force_reinstall() {
     
     # Fallback to hardcoded URL
     if [ -z "$ms_uri" ]; then
-        ms_uri="https://raw.githubusercontent.com/nulLeeKH/magicscripts/main/core/ms.sh"
+        ms_uri="https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.sh"
     fi
     
     # Download ms.sh
@@ -1328,7 +1328,7 @@ handle_ms_force_reinstall() {
     fi
     
     if [ -z "$registry_url" ]; then
-        registry_url="https://raw.githubusercontent.com/nulLeeKH/magicscripts/refs/heads/main/core/ms.msreg"
+        registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msreg"
     fi
     
     if [ "$new_checksum" != "unknown" ]; then
@@ -1353,7 +1353,7 @@ handle_update() {
         echo "${YELLOW}Updating Magic Scripts core...${NC}"
         
         # Use update.sh for ms update
-        local update_script_url="https://raw.githubusercontent.com/nulLeeKH/magicscripts/main/core/installer/update.sh"
+        local update_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh"
         local temp_update="/tmp/ms_update_$$.sh"
         
         printf "  Downloading update script... "
@@ -1497,14 +1497,14 @@ handle_update() {
             # Download upgrade script from GitHub
             local temp_upgrade="/tmp/ms_upgrade_$$.sh"
             if command -v curl >/dev/null 2>&1; then
-                if curl -fsSL "https://raw.githubusercontent.com/nulLeeKH/magicscripts/main/core/installer/update.sh" -o "$temp_upgrade"; then
+                if curl -fsSL "https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh" -o "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
                     exit 1
                 fi
             elif command -v wget >/dev/null 2>&1; then
-                if wget -q "https://raw.githubusercontent.com/nulLeeKH/magicscripts/main/core/installer/update.sh" -O "$temp_upgrade"; then
+                if wget -q "https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh" -O "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
