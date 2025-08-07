@@ -111,6 +111,74 @@ show_help() {
     echo "  ${CYAN}ms status${NC}                              # Check installation"
 }
 
+suggest_similar_command() {
+    local input="$1"
+    
+    # Common typos and patterns
+    case "$input" in
+        add|Add)
+            echo "install"
+            ;;
+        remove|Remove|rm|delete)
+            echo "uninstall"
+            ;;
+        list|ls)
+            echo "search"
+            ;;
+        info|show)
+            echo "status"
+            ;;
+        fix|repair)
+            echo "doctor"
+            ;;
+        get)
+            echo "install"
+            ;;
+        put)
+            echo "install"
+            ;;
+        conf|configure)
+            echo "config"
+            ;;
+        registry|repo)
+            echo "reg"
+            ;;
+        ver|--version|-v)
+            echo "version"
+            ;;
+        h|--help|-h)
+            echo "help"
+            ;;
+        *)
+            # Check for single character typos or similar patterns
+            for cmd in help version status doctor upgrade search install uninstall update versions reinstall config reg; do
+                # Check if input is a substring or close match
+                case "$cmd" in
+                    *"$input"*|"$input"*)
+                        echo "$cmd"
+                        return
+                        ;;
+                esac
+                
+                # Check if they start with the same letter and are similar length
+                input_first=$(echo "$input" | cut -c1)
+                cmd_first=$(echo "$cmd" | cut -c1)
+                input_len=${#input}
+                cmd_len=${#cmd}
+                len_diff=$((input_len - cmd_len))
+                if [ $len_diff -lt 0 ]; then
+                    len_diff=$((-len_diff))
+                fi
+                
+                if [ "$input_first" = "$cmd_first" ] && [ $len_diff -le 2 ]; then
+                    echo "$cmd"
+                    return
+                fi
+            done
+            ;;
+    esac
+}
+
 show_status() {
     echo "${YELLOW}Magic Scripts Installation Status${NC}"
     echo "================================"
@@ -1894,7 +1962,13 @@ case "$1" in
         handle_reinstall "$@"
         ;;
     *)
-        echo "${RED}Error: Unknown command: $1${NC}"
+        unknown_cmd="$1"
+        suggestion=$(suggest_similar_command "$unknown_cmd")
+        if [ -n "$suggestion" ]; then
+            echo "${RED}Error: '$unknown_cmd' is not a command. Did you mean '$suggestion'?${NC}"
+        else
+            echo "${RED}Error: Unknown command: '$unknown_cmd'${NC}"
+        fi
         echo "Run ${CYAN}ms help${NC} for available commands"
         exit 1
         ;;

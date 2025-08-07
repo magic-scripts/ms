@@ -601,6 +601,7 @@ chmod -R 755 ~/.local/share/magicscripts/scripts/
 ### Getting Help
 
 - Run `ms help` for command overview
+- Use `man ms` to view the complete manual page
 - Use `<command> --help` for specific command help
 - Run `ms doctor` for system diagnostics
 - Check `ms status` for installation status

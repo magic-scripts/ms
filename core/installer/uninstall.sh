@@ -24,14 +24,15 @@ remove_from_shell_config() {
     if grep -q "export PATH.*\.local/bin/ms" "$config_file"; then
         # Create temp file without the Magic Scripts lines
         grep -v "# Magic Scripts - added by installer" "$config_file" | \
-        grep -v "export PATH.*\.local/bin/ms" > "$config_file.tmp"
+        grep -v "export PATH.*\.local/bin/ms" | \
+        grep -v "export MANPATH.*\.local/share/man" > "$config_file.tmp"
         
         # Remove empty lines that might be left
         awk 'BEGIN{blank=0} /^$/{blank++} !/^$/{for(i=0;i<blank;i++)print ""; blank=0; print}' "$config_file.tmp" > "$config_file.tmp2"
         mv "$config_file.tmp2" "$config_file"
         rm -f "$config_file.tmp"
         
-        echo "  ${GREEN}Removed${NC}: PATH configuration from $config_file"
+        echo "  ${GREEN}Removed${NC}: PATH and MANPATH configuration from $config_file"
         return 0
     fi
     
@@ -63,7 +64,10 @@ fi
 if [ -d "$CONFIG_DIR" ]; then
     echo "  - User configuration: $CONFIG_DIR"
 fi
-echo "  - PATH modifications from shell configuration files"
+if [ -f "$HOME/.local/share/man/man1/ms.1" ]; then
+    echo "  - Man page: ~/.local/share/man/man1/ms.1"
+fi
+echo "  - PATH and MANPATH modifications from shell configuration files"
 echo ""
 printf "Are you sure? Type 'yes' to continue: "
 read reply < /dev/tty
@@ -93,6 +97,15 @@ if [ -d "$MAGIC_DIR" ]; then
     echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
 else
     echo "  ${YELLOW}Not found${NC}: Magic Scripts data directory"
+fi
+
+# Remove man page
+MAN_FILE="$HOME/.local/share/man/man1/ms.1"
+if [ -f "$MAN_FILE" ]; then
+    rm -f "$MAN_FILE"
+    echo "  ${GREEN}Removed${NC}: Man page ($MAN_FILE)"
+else
+    echo "  ${YELLOW}Not found${NC}: Man page"
 fi
 
 # Remove user configuration (ask first)

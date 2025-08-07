@@ -181,10 +181,18 @@ find_best_ms_version() {
 update_shell_config() {
     local shell_config="$1"
     local path_line='export PATH="$HOME/.local/bin/ms:$PATH"'
+    local manpath_line='export MANPATH="$HOME/.local/share/man:$MANPATH"'
     
     # Check if already exists
     if grep -q "export PATH.*\.local/bin/ms" "$shell_config" 2>/dev/null; then
         echo "${GREEN}PATH configuration already exists in $shell_config${NC}"
+        
+        # Check if MANPATH needs to be added
+        if ! grep -q "export MANPATH.*\.local/share/man" "$shell_config" 2>/dev/null; then
+            echo "$manpath_line" >> "$shell_config"
+            echo "${GREEN}Added MANPATH configuration to $shell_config${NC}"
+            return 0
+        fi
         return 1
     fi
     
@@ -192,7 +200,8 @@ update_shell_config() {
     echo "" >> "$shell_config"
     echo "# Magic Scripts - added by installer" >> "$shell_config"
     echo "$path_line" >> "$shell_config"
-    echo "${GREEN}Added PATH configuration to $shell_config${NC}"
+    echo "$manpath_line" >> "$shell_config"
+    echo "${GREEN}Added PATH and MANPATH configuration to $shell_config${NC}"
     return 0
 }
 
@@ -349,6 +358,17 @@ MAGIC_SCRIPT_DIR="$MAGIC_DIR"
 exec "\$MAGIC_SCRIPT_DIR/scripts/ms.sh" "\$@"
 EOF
 chmod 755 "$INSTALL_DIR/ms"
+
+# Install man page
+printf "  Installing man page... "
+MAN_DIR="$HOME/.local/share/man/man1"
+mkdir -p "$MAN_DIR"
+if download_file "$RAW_URL/core/ms.1" "$MAN_DIR/ms.1"; then
+    printf "${GREEN}done${NC}\n"
+else
+    printf "${YELLOW}failed${NC}\n"
+    echo "  ${YELLOW}Warning: Could not install man page. Manual will not be available.${NC}"
+fi
 
 # Create metadata directory and file for ms command
 mkdir -p "$MAGIC_DIR/installed"
