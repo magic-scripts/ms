@@ -1555,19 +1555,18 @@ handle_reinstall() {
     local failed_count=0
     
     for cmd in "$@"; do
-        printf "  Reinstalling ${CYAN}%s${NC}... " "$cmd"
-        
         # Special handling for ms itself
         if [ "$cmd" = "ms" ]; then
+            # handle_ms_force_reinstall shows its own messages
             if handle_ms_force_reinstall; then
-                echo "${GREEN}done${NC}"
                 reinstall_count=$((reinstall_count + 1))
             else
-                echo "${RED}failed${NC}"
                 failed_count=$((failed_count + 1))
             fi
             continue
         fi
+        
+        printf "  Reinstalling ${CYAN}%s${NC}... " "$cmd"
         
         # First, uninstall the command
         local INSTALL_DIR="$HOME/.local/bin/ms"
@@ -1620,11 +1619,18 @@ handle_reinstall() {
 }
 
 handle_ms_force_reinstall() {
-    echo "${BLUE}Force reinstalling Magic Scripts...${NC}"
+    echo ""
+    echo "${BLUE}═══════════════════════════════════════════${NC}"
+    echo "${BLUE}    Magic Scripts Complete Reinstallation${NC}"
+    echo "${BLUE}═══════════════════════════════════════════${NC}"
+    echo ""
+    echo "${YELLOW}This will completely remove and reinstall Magic Scripts.${NC}"
+    echo "${YELLOW}You will be asked to confirm the uninstallation.${NC}"
     echo ""
     
     # Step 1: Run uninstall script
-    echo "${YELLOW}Step 1: Uninstalling current Magic Scripts...${NC}"
+    echo "${CYAN}Step 1: Uninstalling current Magic Scripts...${NC}"
+    echo "─────────────────────────────────────────"
     local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
     local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
@@ -1651,23 +1657,37 @@ handle_ms_force_reinstall() {
     fi
     
     chmod +x "$temp_uninstall"
-    echo "  Running uninstaller..."
-    # Run uninstall script with automatic 'yes' response
-    echo "yes" | sh "$temp_uninstall" >/dev/null 2>&1
+    echo ""
+    
+    # Run uninstall script - user must confirm
+    sh "$temp_uninstall"
+    local uninstall_result=$?
     rm -f "$temp_uninstall"
     
+    if [ $uninstall_result -ne 0 ]; then
+        echo ""
+        echo "${RED}✗ Reinstallation cancelled or failed at uninstall step${NC}"
+        return 1
+    fi
+    
     echo ""
-    echo "${YELLOW}Step 2: Installing fresh Magic Scripts...${NC}"
+    echo "${CYAN}Step 2: Installing fresh Magic Scripts...${NC}"
+    echo "─────────────────────────────────────────"
     
     # Step 2: Run install script
     local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh"
-    local temp_install=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_install=$(mktemp) || { 
+        echo "${RED}Error: Cannot create temp file${NC}" >&2
+        return 1
+    }
+    
     printf "  Downloading install script... "
     if command -v curl >/dev/null 2>&1; then
         if curl -fsSL "$install_script_url" -o "$temp_install"; then
             printf "${GREEN}done${NC}\n"
         else
             printf "${RED}failed${NC}\n"
+            echo "${RED}✗ Failed to download install script${NC}"
             rm -f "$temp_install"
             return 1
         fi
@@ -1676,6 +1696,7 @@ handle_ms_force_reinstall() {
             printf "${GREEN}done${NC}\n"
         else
             printf "${RED}failed${NC}\n"
+            echo "${RED}✗ Failed to download install script${NC}"
             rm -f "$temp_install"
             return 1
         fi
@@ -1685,13 +1706,23 @@ handle_ms_force_reinstall() {
     fi
     
     chmod +x "$temp_install"
-    echo "  Running installer..."
-    # Run install script silently
-    sh "$temp_install" >/dev/null 2>&1
+    echo ""
+    
+    # Run install script
+    sh "$temp_install"
+    local install_result=$?
     rm -f "$temp_install"
     
+    if [ $install_result -ne 0 ]; then
+        echo ""
+        echo "${RED}✗ Installation failed${NC}"
+        return 1
+    fi
+    
     echo ""
+    echo "${GREEN}═══════════════════════════════════════════${NC}"
     echo "${GREEN}✅ Magic Scripts reinstallation completed!${NC}"
+    echo "${GREEN}═══════════════════════════════════════════${NC}"
     
     return 0
 }
