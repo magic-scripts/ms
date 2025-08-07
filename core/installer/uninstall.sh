@@ -11,7 +11,6 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
-CONFIG_DIR="$HOME/.magicscripts"
 
 remove_from_shell_config() {
     local config_file="$1"
@@ -59,10 +58,7 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "  - Installation directory: $INSTALL_DIR"
 fi
 if [ -d "$MAGIC_DIR" ]; then
-    echo "  - Magic Scripts data: $MAGIC_DIR"
-fi
-if [ -d "$CONFIG_DIR" ]; then
-    echo "  - User configuration: $CONFIG_DIR"
+    echo "  - Magic Scripts data (including config): $MAGIC_DIR"
 fi
 if [ -f "$HOME/.local/share/man/man1/ms.1" ]; then
     echo "  - Man page: ~/.local/share/man/man1/ms.1"
@@ -108,22 +104,7 @@ else
     echo "  ${YELLOW}Not found${NC}: Man page"
 fi
 
-# Remove user configuration (ask first)
-if [ -d "$CONFIG_DIR" ]; then
-    printf "Remove user configuration directory? (y/N): "
-    read config_reply < /dev/tty
-    case "$config_reply" in
-        y|Y|yes|Yes)
-            rm -rf "$CONFIG_DIR"
-            echo "  ${GREEN}Removed${NC}: User configuration directory"
-            ;;
-        *)
-            echo "  ${YELLOW}Preserved${NC}: User configuration directory ($CONFIG_DIR)"
-            ;;
-    esac
-else
-    echo "  ${YELLOW}Not found${NC}: User configuration directory"
-fi
+# Configuration is now part of MAGIC_DIR, removed with data directory above
 
 # Remove PATH modifications from shell config files
 echo ""

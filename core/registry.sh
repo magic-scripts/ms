@@ -6,10 +6,8 @@
 VERSION="0.0.1"
 
 # Registry directories and files
-GLOBAL_REG_DIR="$HOME/.local/share/magicscripts/reg"
-USER_REG_DIR="$HOME/.magicscripts/reg"
-REG_DIR="$GLOBAL_REG_DIR"
-REGLIST_FILE="$GLOBAL_REG_DIR/reglist"
+REG_DIR="$HOME/.local/share/magicscripts/reg"
+REGLIST_FILE="$REG_DIR/reglist"
 
 # Default registry URL
 DEFAULT_REGISTRY_NAME="ms"
@@ -36,6 +34,18 @@ check_command() {
 download_file() {
     local url="$1"
     local output="$2"
+    
+    # Basic URL validation for security
+    if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
+        echo "Error: Invalid URL format for download: $url" >&2
+        return 1
+    fi
+    
+    # Security check: prevent access to localhost/internal IPs
+    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)" ; then
+        echo "Error: Downloads from local/internal addresses are not allowed for security" >&2
+        return 1
+    fi
     
     if check_command curl; then
         curl -fsSL "$url" -o "$output" 2>/dev/null
@@ -94,9 +104,21 @@ add_registry() {
         return 1
     fi
     
-    # Validate URL format
-    if ! echo "$url" | grep -q "^https\?://"; then
-        echo "Error: URL must start with http:// or https://" >&2
+    # Validate URL format and security
+    if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
+        echo "Error: Invalid URL format. Must be a valid HTTP/HTTPS URL" >&2
+        return 1
+    fi
+    
+    # Security check: ensure URL points to a reasonable domain
+    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)"; then
+        echo "Error: URLs pointing to localhost are not allowed for security reasons" >&2
+        return 1
+    fi
+    
+    # Validate registry name
+    if ! echo "$name" | grep -q "^[a-zA-Z0-9_-]\+$"; then
+        echo "Error: Registry name can only contain letters, numbers, underscores, and dashes" >&2
         return 1
     fi
     
@@ -239,8 +261,8 @@ update_registries() {
 
 # Get all commands from all registries
 get_all_commands() {
-    local temp_commands="/tmp/ms_commands_$$"
-    > "$temp_commands"  # Clear temp file
+    local temp_commands=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    trap "rm -f '$temp_commands'" EXIT
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
@@ -334,8 +356,8 @@ get_registry_commands() {
 
 # Get config keys from all registries
 get_all_config_keys() {
-    local temp_configs="/tmp/ms_configs_$$"
-    > "$temp_configs"  # Clear temp file
+    local temp_configs=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    trap "rm -f '$temp_configs'" EXIT
     
     # Check development registry first
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
@@ -369,7 +391,7 @@ get_all_config_keys() {
 # Search commands by query
 search_commands() {
     local query="$1"
-    local temp_results="/tmp/ms_search_$$"
+    local temp_results=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
     echo "=== Search Results${query:+ for '$query'} ==="
     echo ""
@@ -438,7 +460,8 @@ download_and_parse_msver() {
     local target_cmd="$2"      # Optional: filter by command
     local target_version="$3"  # Optional: filter by version
     
-    local temp_msver="/tmp/ms_msver_$$"
+    local temp_msver=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    trap "rm -f '$temp_msver'" EXIT
     
     if ! download_file "$msver_url" "$temp_msver"; then
         echo "Error: Cannot download .msver file from $msver_url" >&2

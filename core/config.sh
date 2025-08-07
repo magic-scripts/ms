@@ -3,24 +3,20 @@
 # Magic Scripts Configuration System
 # Generic key-value configuration storage
 
-# Configuration file paths
-GLOBAL_CONFIG_FILE="$HOME/.local/share/magicscripts/global-config"
-USER_CONFIG_FILE="$HOME/.magicscripts/config"
-GLOBAL_REG_DIR="$HOME/.local/share/magicscripts/reg"
-USER_REG_DIR="$HOME/.magicscripts/reg"
-REGLIST_FILE="${GLOBAL_REG_DIR}/reglist"
+# Configuration file paths - simplified to single config location
+CONFIG_FILE="$HOME/.local/share/magicscripts/config"
+REG_DIR="$HOME/.local/share/magicscripts/reg"
+REGLIST_FILE="${REG_DIR}/reglist"
 
 # Internal function to ensure directories exist
 ms_internal_ensure_config_dirs() {
-    mkdir -p "$(dirname "$USER_CONFIG_FILE")" 2>/dev/null
-    mkdir -p "$USER_REG_DIR" 2>/dev/null
-    mkdir -p "$(dirname "$GLOBAL_CONFIG_FILE")" 2>/dev/null
-    mkdir -p "$GLOBAL_REG_DIR" 2>/dev/null
+    mkdir -p "$(dirname "$CONFIG_FILE")" 2>/dev/null
+    mkdir -p "$REG_DIR" 2>/dev/null
 }
 
 # Get configuration registry files (merged from all registries)
 ms_internal_get_config_registry_file() {
-    local merged_file="/tmp/ms_merged_config_$$"
+    local merged_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
     if [ -f "$REGLIST_FILE" ]; then
         while IFS=':' read -r name url; do
@@ -28,7 +24,7 @@ ms_internal_get_config_registry_file() {
             [ -z "$url" ] && continue
             [ "${name#\#}" != "$name" ] && continue  # Skip comments
             
-            local reg_file="${GLOBAL_REG_DIR}/${name}.msreg"
+            local reg_file="${REG_DIR}/${name}.msreg"
             
             if [ -f "$reg_file" ]; then
                 grep "^config|" "$reg_file" 2>/dev/null | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
@@ -93,26 +89,12 @@ ms_internal_validate_config_key() {
 ms_internal_get_config_value() {
     local key="$1"
     local default_value="$2"
-    local global_only=false
-    
-    # Parse flags
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -g|--global) global_only=true; shift ;;
-            *) shift ;;
-        esac
-    done
     
     local value=""
     
-    # Try user config first (unless global_only)
-    if [ "$global_only" = false ] && [ -f "$USER_CONFIG_FILE" ]; then
-        value=$(grep "^${key}=" "$USER_CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | head -1)
-    fi
-    
-    # Try global config if no user value found
-    if [ -z "$value" ] && [ -f "$GLOBAL_CONFIG_FILE" ]; then
-        value=$(grep "^${key}=" "$GLOBAL_CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | head -1)
+    # Get value from config file
+    if [ -f "$CONFIG_FILE" ]; then
+        value=$(grep "^${key}=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | head -1)
     fi
     
     # Return value if found
@@ -131,9 +113,6 @@ ms_internal_get_config_value() {
     # Config required but not found
     echo "Configuration required: $key" >&2
     echo "Set with: ms config set $key <value>" >&2
-    if [ "$global_only" = true ]; then
-        echo "Or use: ms config set -g $key <value> for global setting" >&2
-    fi
     return 1
 }
 
@@ -199,20 +178,6 @@ get_config_value() {
 ms_internal_set_config_value() {
     local key="$1"
     local value="$2"
-    local global_config=false
-    local config_file="$USER_CONFIG_FILE"
-    
-    # Parse flags
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -g|--global) 
-                global_config=true
-                config_file="$GLOBAL_CONFIG_FILE"
-                shift 
-                ;;
-            *) shift ;;
-        esac
-    done
     
     if [ -z "$key" ] || [ -z "$value" ]; then
         echo "Error: Both key and value are required" >&2
@@ -221,29 +186,22 @@ ms_internal_set_config_value() {
     
     ms_internal_ensure_config_dirs
     
-    # Ensure global config directory exists
-    if [ "$global_config" = true ]; then
-        mkdir -p "$(dirname "$GLOBAL_CONFIG_FILE")" 2>/dev/null
-    fi
-    
     # Create config file if it doesn't exist
-    touch "$config_file" 2>/dev/null || {
-        echo "Error: Cannot create config file: $config_file" >&2
+    touch "$CONFIG_FILE" 2>/dev/null || {
+        echo "Error: Cannot create config file: $CONFIG_FILE" >&2
         return 1
     }
     
     # Remove existing key
-    grep -v "^${key}=" "$config_file" > "${config_file}.tmp" 2>/dev/null || true
+    grep -v "^${key}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" 2>/dev/null || true
     
     # Add new key=value
-    echo "${key}=${value}" >> "${config_file}.tmp"
+    echo "${key}=${value}" >> "${CONFIG_FILE}.tmp"
     
     # Replace original file
-    mv "${config_file}.tmp" "$config_file"
+    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
     
-    local scope="user"
-    [ "$global_config" = true ] && scope="global"
-    echo "Set $scope config: $key = $value"
+    echo "Set config: $key = $value"
 }
 
 # Public API: Set configuration value with validation
@@ -307,38 +265,22 @@ set_config_value() {
 # Internal function to remove configuration value
 ms_internal_remove_config_value() {
     local key="$1"
-    local global_config=false
-    local config_file="$USER_CONFIG_FILE"
-    
-    # Parse flags
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -g|--global) 
-                global_config=true
-                config_file="$GLOBAL_CONFIG_FILE"
-                shift 
-                ;;
-            *) shift ;;
-        esac
-    done
     
     if [ -z "$key" ]; then
         echo "Error: Key is required" >&2
         return 1
     fi
     
-    if [ ! -f "$config_file" ]; then
-        echo "Config file not found: $config_file" >&2
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Config file not found: $CONFIG_FILE" >&2
         return 1
     fi
     
     # Remove the key
-    grep -v "^${key}=" "$config_file" > "${config_file}.tmp" 2>/dev/null || true
-    mv "${config_file}.tmp" "$config_file"
+    grep -v "^${key}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" 2>/dev/null || true
+    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
     
-    local scope="user"
-    [ "$global_config" = true ] && scope="global"
-    echo "Removed $scope config: $key"
+    echo "Removed config: $key"
 }
 
 # Public API: Remove configuration value with validation
@@ -479,7 +421,7 @@ ms_internal_interactive_setup_category() {
     echo ""
     
     # Use a temporary file to avoid subshell issues with read
-    local temp_file="/tmp/ms_config_keys_$$"
+    local temp_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     echo "$keys" > "$temp_file"
     
     # Use file descriptor 3 for the temp file to avoid conflict with stdin
@@ -528,7 +470,7 @@ ms_internal_interactive_setup_command() {
     echo ""
     
     # Use a temporary file to avoid subshell issues with read
-    local temp_file="/tmp/ms_config_keys_$$"
+    local temp_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     echo "$keys" > "$temp_file"
     
     # Use file descriptor 3 for the temp file to avoid conflict with stdin
@@ -592,13 +534,11 @@ EOF
 
 # Internal function to list all configuration values with descriptions
 ms_internal_list_config_values() {
-    local global_only=false
     local show_registry=false
     
     # Parse flags
     while [ $# -gt 0 ]; do
         case "$1" in
-            -g|--global) global_only=true; shift ;;
             -r|--registry) show_registry=true; shift ;;
             *) shift ;;
         esac
@@ -626,8 +566,8 @@ ms_internal_list_config_values() {
     echo "=== Configuration Values ==="
     echo ""
     
-    if [ "$global_only" = false ] && [ -f "$USER_CONFIG_FILE" ]; then
-        echo "User config ($USER_CONFIG_FILE):"
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "Config file ($CONFIG_FILE):"
         while IFS= read -r line; do
             if [ -n "$line" ]; then
                 key=$(echo "$line" | cut -d'=' -f1)
@@ -640,30 +580,10 @@ ms_internal_list_config_values() {
                     printf "  %s\n" "$line"
                 fi
             fi
-        done < "$USER_CONFIG_FILE"
+        done < "$CONFIG_FILE"
         echo ""
-    fi
-    
-    if [ -f "$GLOBAL_CONFIG_FILE" ]; then
-        echo "Global config ($GLOBAL_CONFIG_FILE):"
-        while IFS= read -r line; do
-            if [ -n "$line" ]; then
-                key=$(echo "$line" | cut -d'=' -f1)
-                value=$(echo "$line" | cut -d'=' -f2-)
-                key_info=$(ms_internal_get_config_key_info "$key")
-                if [ -n "$key_info" ]; then
-                    desc=$(echo "$key_info" | cut -d':' -f3)
-                    printf "  %-20s = %-20s # %s\n" "$key" "$value" "$desc"
-                else
-                    printf "  %s\n" "$line"
-                fi
-            fi
-        done < "$GLOBAL_CONFIG_FILE"
-        echo ""
-    fi
-    
-    if [ ! -f "$USER_CONFIG_FILE" ] && [ ! -f "$GLOBAL_CONFIG_FILE" ]; then
-        echo "No configuration files found."
+    else
+        echo "No configuration file found."
         echo "Use 'ms config set <key> <value>' to add configuration."
         echo "Use 'ms config set <command>' for interactive setup."
     fi

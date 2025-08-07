@@ -52,7 +52,6 @@ show_help() {
     echo "${YELLOW}Configuration:${NC}"
     echo "  ${GREEN}config list${NC}             List all configuration values"
     echo "  ${GREEN}config set <key> <value>${NC} Set a configuration value"
-    echo "  ${GREEN}config set -g <key> <value>${NC} Set a global configuration value"
     echo "  ${GREEN}config get <key>${NC}        Get a configuration value"
     echo "  ${GREEN}config remove <key>${NC}     Remove a configuration value"
     echo ""
@@ -330,30 +329,18 @@ show_status() {
         echo "  ${RED}✗${NC} Magic Scripts directory: $MAGIC_SCRIPT_DIR"
     fi
     
-    if [ -d "$HOME/.magicscripts" ]; then
-        echo "  ${GREEN}✓${NC} User config directory: $HOME/.magicscripts"
-    else
-        echo "  ${RED}✗${NC} User config directory: $HOME/.magicscripts"
-    fi
-    
     if [ -d "$HOME/.local/share/magicscripts" ]; then
-        echo "  ${GREEN}✓${NC} Global config directory: $HOME/.local/share/magicscripts"
+        echo "  ${GREEN}✓${NC} Magic Scripts data directory: $HOME/.local/share/magicscripts"
     else
-        echo "  ${RED}✗${NC} Global config directory: $HOME/.local/share/magicscripts"
+        echo "  ${RED}✗${NC} Magic Scripts data directory: $HOME/.local/share/magicscripts"
     fi
     
     echo ""
     echo "${CYAN}Configuration:${NC}"
-    if [ -f "$HOME/.magicscripts/config" ]; then
-        echo "  ${GREEN}✓${NC} User config: $HOME/.magicscripts/config"
+    if [ -f "$HOME/.local/share/magicscripts/config" ]; then
+        echo "  ${GREEN}✓${NC} Config file: $HOME/.local/share/magicscripts/config"
     else
-        echo "  ${YELLOW}!${NC} User config: Not found (will use defaults)"
-    fi
-    
-    if [ -f "$HOME/.local/share/magicscripts/global-config" ]; then
-        echo "  ${GREEN}✓${NC} Global config: $HOME/.local/share/magicscripts/global-config"
-    else
-        echo "  ${YELLOW}!${NC} Global config: Not found (will use defaults)"
+        echo "  ${YELLOW}!${NC} Config file: Not found (will use defaults)"
     fi
     
     echo ""
@@ -382,11 +369,6 @@ handle_config() {
             ;;
         set)
             shift
-            local global_flag=""
-            if [ "$1" = "-g" ] || [ "$1" = "--global" ]; then
-                global_flag="-g"
-                shift
-            fi
             
             # Handle interactive setup: ms config set <command_or_key> or ms config set
             if [ $# -eq 1 ] || [ $# -eq 0 ]; then
@@ -401,13 +383,13 @@ handle_config() {
             
             # Handle direct key-value setting: ms config set <key> <value>
             if [ -z "$1" ] || [ -z "$2" ]; then
-                echo "${RED}Error: Usage: ms config set [-g] <key> <value>${NC}"
+                echo "${RED}Error: Usage: ms config set <key> <value>${NC}"
                 echo "${RED}   or: ms config set <command_or_key>        # Interactive setup${NC}"
                 exit 1
             fi
             
             if command -v set_config_value >/dev/null 2>&1; then
-                set_config_value "$1" "$2" $global_flag
+                set_config_value "$1" "$2"
             else
                 echo "${RED}Config system not available${NC}"
                 exit 1
@@ -434,19 +416,14 @@ handle_config() {
             ;;
         remove)
             shift
-            local global_flag=""
-            if [ "$1" = "-g" ] || [ "$1" = "--global" ]; then
-                global_flag="-g"
-                shift
-            fi
             
             if [ -z "$1" ]; then
-                echo "${RED}Error: Usage: ms config remove [-g] <key>${NC}"
+                echo "${RED}Error: Usage: ms config remove <key>${NC}"
                 exit 1
             fi
             
             if command -v remove_config_value >/dev/null 2>&1; then
-                remove_config_value "$1" $global_flag
+                remove_config_value "$1"
             else
                 echo "${RED}Config system not available${NC}"
                 exit 1
@@ -460,7 +437,7 @@ handle_config() {
             echo "  ${CYAN}ms config list${NC}                      # List current config values"
             echo "  ${CYAN}ms config list -r${NC}                   # Show available config keys"
             echo "  ${CYAN}ms config set AUTHOR_NAME 'Your Name'${NC} # Set specific config"
-            echo "  ${CYAN}ms config set -g DB_HOST localhost${NC}   # Set global config"
+            echo "  ${CYAN}ms config set DB_HOST localhost${NC}     # Set config value"
             echo "  ${CYAN}ms config set gigen${NC}                 # Interactive setup for gigen"
             echo "  ${CYAN}ms config set AUTHOR_NAME${NC}           # Interactive setup for single key"
             echo "  ${CYAN}ms config set${NC}                       # Interactive setup menu"
@@ -1156,7 +1133,7 @@ handle_uninstall() {
             
             # Use uninstall.sh for ms uninstall
             local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
-            local temp_uninstall="/tmp/ms_uninstall_$$.sh"
+            local temp_uninstall=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
             
             printf "    Downloading uninstall script... "
             if command -v curl >/dev/null 2>&1; then
@@ -1196,7 +1173,7 @@ handle_uninstall() {
                 echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
                 removed_count=$((removed_count + 1))
             fi
-            echo "  ${YELLOW}Note:${NC} Configuration files in ~/.magicscripts preserved"
+            echo "  ${YELLOW}Note:${NC} Configuration files in Magic Scripts data directory were removed"
             echo "  ${YELLOW}Note:${NC} You may need to remove ~/.local/bin/ms from your PATH"
             break
         fi
@@ -1246,7 +1223,7 @@ doctor_check() {
     
     # Check directories
     echo "${CYAN}Checking directories:${NC}"
-    for dir in "$HOME/.local/bin/ms" "$MAGIC_SCRIPT_DIR" "$HOME/.magicscripts"; do
+    for dir in "$HOME/.local/bin/ms" "$MAGIC_SCRIPT_DIR"; do
         if [ -d "$dir" ]; then
             echo "  ${GREEN}✓${NC} $dir"
         else
@@ -1606,7 +1583,7 @@ handle_ms_force_reinstall() {
     fi
     
     # Download ms.sh
-    local temp_file="/tmp/ms.sh.$$"
+    local temp_file=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
     printf "  Downloading ms.sh... "
     if command -v curl >/dev/null 2>&1; then
         if curl -fsSL "$ms_uri" -o "$temp_file"; then
@@ -1678,7 +1655,7 @@ handle_update() {
         
         # Use update.sh for ms update
         local update_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh"
-        local temp_update="/tmp/ms_update_$$.sh"
+        local temp_update=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
         
         printf "  Downloading update script... "
         if command -v curl >/dev/null 2>&1; then
@@ -1819,7 +1796,7 @@ handle_update() {
             upgrade_script="$MAGIC_SCRIPT_DIR/core/installer/update.sh"
         else
             # Download upgrade script from GitHub
-            local temp_upgrade="/tmp/ms_upgrade_$$.sh"
+            local temp_upgrade=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
             if command -v curl >/dev/null 2>&1; then
                 if curl -fsSL "https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh" -o "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"

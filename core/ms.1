@@ -64,9 +64,6 @@ Show available configuration keys
 .B config set \fIkey\fR \fIvalue\fR
 Set a configuration value
 .TP
-.B config set -g \fIkey\fR \fIvalue\fR
-Set global configuration
-.TP
 .B config get \fIkey\fR
 Get a configuration value
 .TP
@@ -121,11 +118,8 @@ curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installe
 .fi
 .SH CONFIGURATION FILES
 .TP
-.I ~/.magicscripts/config
-User configuration file
-.TP
-.I ~/.local/share/magicscripts/global-config
-Global configuration file
+.I ~/.local/share/magicscripts/config
+Configuration file
 .TP
 .I ~/.local/share/magicscripts/reg/reglist
 Registry list file
