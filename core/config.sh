@@ -14,10 +14,11 @@ ms_internal_ensure_config_dirs() {
     mkdir -p "$REG_DIR" 2>/dev/null
 }
 
-# Get configuration registry files (merged from all registries)
+# Get configuration registry files (merged from all registries) - supports 2-tier system
 ms_internal_get_config_registry_file() {
     local merged_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
+    # In 2-tier system, config info is in .msver files pointed by .msreg files
     if [ -f "$REGLIST_FILE" ]; then
         while IFS=':' read -r name url; do
             [ -z "$name" ] && continue
@@ -27,14 +28,44 @@ ms_internal_get_config_registry_file() {
             local reg_file="${REG_DIR}/${name}.msreg"
             
             if [ -f "$reg_file" ]; then
-                grep "^config|" "$reg_file" 2>/dev/null | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
+                # Get all commands from .msreg and fetch their .msver files for config info
+                grep "^command|" "$reg_file" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+                    [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
+                    
+                    # Download and parse .msver file for config entries
+                    if command -v download_and_parse_msver >/dev/null 2>&1; then
+                        download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
+                    else
+                        # Fallback: try to source registry.sh if not available
+                        if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh" ]; then
+                            . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh"
+                            if command -v download_and_parse_msver >/dev/null 2>&1; then
+                                download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
+                            fi
+                        fi
+                    fi
+                done
             fi
         done < "$REGLIST_FILE"
     fi
     
-    # Fallback to development registry
+    # Fallback to development registry (also 2-tier now)
     if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
-        grep "^config|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" 2>/dev/null | sed 's/^config|//' | sed 's/|/:/g' > "$merged_file"
+        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+            [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
+            
+            if command -v download_and_parse_msver >/dev/null 2>&1; then
+                download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
+            else
+                # Fallback: try to source registry.sh if not available
+                if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh" ]; then
+                    . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh"
+                    if command -v download_and_parse_msver >/dev/null 2>&1; then
+                        download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
+                    fi
+                fi
+            fi
+        done
     fi
     
     echo "$merged_file"
@@ -535,30 +566,115 @@ EOF
 # Internal function to list all configuration values with descriptions
 ms_internal_list_config_values() {
     local show_registry=false
+    local registry_filter=""
+    local command_filter=""
     
     # Parse flags
     while [ $# -gt 0 ]; do
         case "$1" in
-            -r|--registry) show_registry=true; shift ;;
+            -r|--registry) 
+                show_registry=true
+                if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
+                    registry_filter="$2"
+                    shift 2
+                else
+                    shift
+                fi
+                ;;
+            -c|--command) 
+                show_registry=true
+                if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
+                    command_filter="$2"
+                    shift 2
+                else
+                    shift
+                fi
+                ;;
             *) shift ;;
         esac
     done
     
     if [ "$show_registry" = true ]; then
-        echo "=== Available Configuration Keys ==="
-        echo ""
-        local config_registry_file=$(ms_internal_get_config_registry_file)
-        if [ -f "$config_registry_file" ]; then
-            while IFS=':' read -r key default desc category script; do
-                [ -z "$key" ] && continue
-                printf "%-20s [%s]: %s\n" "$key" "$category" "$desc"
-                printf "%-20s Default: %s, Used by: %s\n" "" "${default:-<none>}" "$script"
-                echo ""
-            done < "$config_registry_file"
-            rm -f "$config_registry_file" 2>/dev/null
+        if [ -n "$registry_filter" ]; then
+            echo "=== Configuration Keys for Registry '$registry_filter' ==="
+        elif [ -n "$command_filter" ]; then
+            echo "=== Configuration Keys for Command '$command_filter' ==="
         else
-            echo "Config registry not found"
-            rm -f "$config_registry_file" 2>/dev/null
+            echo "=== Available Configuration Keys ==="
+        fi
+        echo ""
+        
+        # Get config keys based on filter
+        local config_found=false
+        
+        if [ -n "$registry_filter" ]; then
+            # Get config keys from specific registry
+            local reg_file="${REG_DIR}/${registry_filter}.msreg"
+            if [ -f "$reg_file" ]; then
+                grep "^command|" "$reg_file" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+                    [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
+                    
+                    if command -v download_and_parse_msver >/dev/null 2>&1; then
+                        download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | while IFS='|' read -r config_prefix key default desc cat scripts; do
+                            printf "%-20s [%s]: %s\n" "$key" "${cat:-misc}" "$desc"
+                            printf "%-20s Default: %s, Used by: %s\n" "" "${default:-<none>}" "$scripts"
+                            echo ""
+                            config_found=true
+                        done
+                    else
+                        # Fallback: try to source registry.sh if not available
+                        if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh" ]; then
+                            . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh"
+                            if command -v download_and_parse_msver >/dev/null 2>&1; then
+                                download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | while IFS='|' read -r config_prefix key default desc cat scripts; do
+                                    printf "%-20s [%s]: %s\n" "$key" "${cat:-misc}" "$desc"
+                                    printf "%-20s Default: %s, Used by: %s\n" "" "${default:-<none>}" "$scripts"
+                                    echo ""
+                                    config_found=true
+                                done
+                            fi
+                        fi
+                    fi
+                done
+            else
+                echo "Registry '$registry_filter' not found"
+            fi
+        elif [ -n "$command_filter" ]; then
+            # Get config keys for specific command
+            if command -v get_command_config_keys >/dev/null 2>&1; then
+                get_command_config_keys "$command_filter" | while IFS='|' read -r config_prefix key default desc cat scripts; do
+                    printf "%-20s [%s]: %s\n" "$key" "${cat:-misc}" "$desc"
+                    printf "%-20s Default: %s, Used by: %s\n" "" "${default:-<none>}" "$scripts"
+                    echo ""
+                    config_found=true
+                done
+            fi
+        else
+            # Get all config keys
+            local config_registry_file=$(ms_internal_get_config_registry_file)
+            if [ -f "$config_registry_file" ]; then
+                while IFS=':' read -r key default desc category script; do
+                    [ -z "$key" ] && continue
+                    printf "%-20s [%s]: %s\n" "$key" "$category" "$desc"
+                    printf "%-20s Default: %s, Used by: %s\n" "" "${default:-<none>}" "$script"
+                    echo ""
+                    config_found=true
+                done < "$config_registry_file"
+                rm -f "$config_registry_file" 2>/dev/null
+            else
+                echo "Config registry not found"
+                rm -f "$config_registry_file" 2>/dev/null
+            fi
+        fi
+        
+        if [ "$config_found" != true ]; then
+            if [ -n "$registry_filter" ]; then
+                echo "No configuration keys found for registry '$registry_filter'"
+            elif [ -n "$command_filter" ]; then
+                echo "No configuration keys found for command '$command_filter'"
+            else
+                echo "No configuration keys found"
+            fi
         fi
         return
     fi

@@ -51,6 +51,8 @@ show_help() {
     echo ""
     echo "${YELLOW}Configuration:${NC}"
     echo "  ${GREEN}config list${NC}             List all configuration values"
+    echo "  ${GREEN}config list -r [registry]${NC} Show available config keys (optionally filtered)"
+    echo "  ${GREEN}config list -c <command>${NC}  Show config keys for specific command"
     echo "  ${GREEN}config set <key> <value>${NC} Set a configuration value"
     echo "  ${GREEN}config get <key>${NC}        Get a configuration value"
     echo "  ${GREEN}config remove <key>${NC}     Remove a configuration value"
@@ -435,7 +437,9 @@ handle_config() {
             echo ""
             echo "${YELLOW}Usage:${NC}"
             echo "  ${CYAN}ms config list${NC}                      # List current config values"
-            echo "  ${CYAN}ms config list -r${NC}                   # Show available config keys"
+            echo "  ${CYAN}ms config list -r${NC}                   # Show all available config keys"
+            echo "  ${CYAN}ms config list -r template${NC}          # Show config keys from template registry"
+            echo "  ${CYAN}ms config list -c msworld${NC}           # Show config keys for msworld command"
             echo "  ${CYAN}ms config set AUTHOR_NAME 'Your Name'${NC} # Set specific config"
             echo "  ${CYAN}ms config set DB_HOST localhost${NC}     # Set config value"
             echo "  ${CYAN}ms config set gigen${NC}                 # Interactive setup for gigen"
@@ -608,8 +612,8 @@ install_commands_with_detection() {
         local found_registries=()
         local registry_info=()
         
-        if command -v list_registries >/dev/null 2>&1; then
-            local registries_list=$(list_registries | grep '^  [^ ]' | awk '{print $1}')
+        if command -v get_registry_names >/dev/null 2>&1; then
+            local registries_list=$(get_registry_names)
             
             for registry_name in $registries_list; do
                 if command -v get_registry_commands >/dev/null 2>&1; then
@@ -665,7 +669,7 @@ install_commands_with_detection() {
             # Single registry found
             local target_registry="${found_registries[0]}"
             local target_info="${registry_info[0]}"
-            local found_version=$(echo "$target_info" | cut -d'|' -f5)
+            local found_version=$(echo "$target_info" | cut -d'|' -f6)
             
             printf "  Installing ${CYAN}%s${NC}" "$base_cmd"
             if [ -n "$requested_version" ] && [ "$requested_version" != "latest" ]; then
@@ -731,7 +735,7 @@ install_commands_with_detection() {
                 local selected_index=$((choice - 1))
                 local target_registry="${found_registries[$selected_index]}"
                 local target_info="${registry_info[$selected_index]}"
-                local found_version=$(echo "$target_info" | cut -d'|' -f5)
+                local found_version=$(echo "$target_info" | cut -d'|' -f6)
                 
                 printf "  Installing ${CYAN}%s${NC}" "$base_cmd"
                 if [ -n "$requested_version" ] && [ "$requested_version" != "latest" ]; then
@@ -1432,11 +1436,48 @@ handle_versions() {
     if [ $# -eq 0 ]; then
         echo "${RED}Error: No command specified${NC}"
         echo "Usage: ms versions <command>"
+        echo "       ms versions --all         # Show versions for all commands"
+        echo "       ms versions -r <registry> # Show versions for all commands in registry"
         echo ""
         echo "Examples:"
-        echo "  ms versions gigen        # Show available versions for gigen"
-        echo "  ms versions --all        # Show versions for all commands"
+        echo "  ms versions gigen            # Show available versions for gigen"
+        echo "  ms versions --all            # Show versions for all commands"
+        echo "  ms versions -r template      # Show versions for all commands in template registry"
         exit 1
+    fi
+    
+    # Handle registry-specific versions
+    if [ "$1" = "-r" ] && [ -n "$2" ]; then
+        local registry_name="$2"
+        echo "${YELLOW}Available versions for commands in '$registry_name' registry:${NC}"
+        echo ""
+        
+        if command -v get_registry_commands >/dev/null 2>&1; then
+            local registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
+            if [ -n "$registry_commands" ]; then
+                echo "$registry_commands" | while IFS='|' read -r prefix cmd msver_url desc category; do
+                    [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
+                    
+                    echo "${CYAN}$cmd${NC} - $desc"
+                    if command -v download_and_parse_msver >/dev/null 2>&1; then
+                        local versions=$(download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^version|")
+                        if [ -n "$versions" ]; then
+                            echo "$versions" | while IFS='|' read -r version_prefix version_name url checksum; do
+                                printf "  %-10s %s\n" "$version_name" "$url"
+                            done
+                        else
+                            echo "  No versions found"
+                        fi
+                    fi
+                    echo ""
+                done
+            else
+                echo "No commands found in registry '$registry_name'"
+            fi
+        else
+            echo "Registry system not available"
+        fi
+        return
     fi
     
     if [ "$1" = "--all" ]; then
@@ -1466,8 +1507,24 @@ handle_versions() {
     
     echo "${YELLOW}Version information for $cmd:${NC}"
     echo "  Installed: $installed_version"
-    echo "  Registry:  $registry_version"
+    echo "  Latest:    $registry_version"
     echo ""
+    
+    # Show all available versions from 2-tier system
+    if command -v get_command_versions >/dev/null 2>&1; then
+        local all_versions=$(get_command_versions "$cmd" 2>/dev/null)
+        if [ -n "$all_versions" ]; then
+            echo "${CYAN}Available versions:${NC}"
+            echo "$all_versions" | while IFS='|' read -r version_prefix version_name url checksum; do
+                if [ "$version_name" = "$installed_version" ]; then
+                    printf "  ${GREEN}%-10s${NC} %s ${GREEN}(installed)${NC}\n" "$version_name" "$url"
+                else
+                    printf "  %-10s %s\n" "$version_name" "$url"
+                fi
+            done
+            echo ""
+        fi
+    fi
     
     local comparison=$(compare_versions "$installed_version" "$registry_version")
     if [ "$comparison" = "same" ]; then

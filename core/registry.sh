@@ -57,6 +57,20 @@ download_file() {
     fi
 }
 
+# Get registry names only (helper function for programmatic use)
+get_registry_names() {
+    init_registry_dirs
+    
+    if [ -f "$REGLIST_FILE" ]; then
+        while IFS=':' read -r name url; do
+            [ -z "$name" ] && continue
+            [ -z "$url" ] && continue
+            [ "${name#\#}" != "$name" ] && continue  # Skip comments
+            echo "$name"
+        done < "$REGLIST_FILE"
+    fi
+}
+
 # List all registries
 list_registries() {
     init_registry_dirs
@@ -460,6 +474,9 @@ download_and_parse_msver() {
         echo "Error: Cannot download .msver file from $msver_url" >&2
         return 1
     fi
+    
+    # Ensure file ends with newline for proper parsing
+    echo "" >> "$temp_msver"
     
     # Parse .msver file
     while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3; do
