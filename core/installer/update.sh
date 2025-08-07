@@ -13,7 +13,7 @@ INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
 
 # URLs
-RAW_URL="https://raw.githubusercontent.com/nulLeeKH/magicscripts/main"
+RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/main"
 
 check_command() {
     command -v "$1" >/dev/null 2>&1
@@ -43,7 +43,7 @@ if [ ! -f "$INSTALL_DIR/ms" ] || [ ! -d "$MAGIC_DIR" ]; then
     echo "${RED}Error: Magic Scripts doesn't appear to be installed.${NC}"
     echo ""
     echo "Please run the installer first:"
-    echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/nulLeeKH/magicscripts/main/installer/install.sh | sh${NC}"
+    echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh${NC}"
     exit 1
 fi
 

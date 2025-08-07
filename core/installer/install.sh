@@ -14,8 +14,8 @@ MAGIC_DIR="$HOME/.local/share/magicscripts"
 TEMP_DIR="/tmp/magicscripts-$$"
 
 # URLs
-REPO_URL="https://github.com/nulLeeKH/magicscripts"
-RAW_URL="https://raw.githubusercontent.com/nulLeeKH/magicscripts/main"
+REPO_URL="https://github.com/magic-scripts/ms"
+RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/main"
 
 check_command() {
     command -v "$1" >/dev/null 2>&1
@@ -26,6 +26,18 @@ cleanup() {
 }
 
 trap cleanup EXIT INT TERM
+
+verify_url() {
+    local url="$1"
+    
+    if check_command curl; then
+        curl -fsSI "$url" -o /dev/null 2>/dev/null
+    elif check_command wget; then
+        wget -q --spider "$url" 2>/dev/null
+    else
+        return 1
+    fi
+}
 
 download_file() {
     local url="$1"
@@ -65,6 +77,24 @@ echo "       Developer Automation Tools       "
 echo "========================================="
 echo ""
 
+# Verify repository is accessible
+echo "Verifying repository access..."
+if ! verify_url "$RAW_URL/core/config.sh"; then
+    echo "${RED}Error: Cannot access Magic Scripts repository${NC}"
+    echo ""
+    echo "The repository may not be available yet."
+    echo "Please check:"
+    echo "  1. Repository exists at: $REPO_URL"
+    echo "  2. Files are pushed to the main branch"
+    echo "  3. Repository is public or you have access"
+    echo ""
+    echo "Try this URL in your browser:"
+    echo "  $RAW_URL/core/config.sh"
+    exit 1
+fi
+echo "${GREEN}✓ Repository accessible${NC}"
+echo ""
+
 # Check for existing installation
 if [ -f "$HOME/.local/bin/ms/ms" ]; then
     echo "${YELLOW}Existing Magic Scripts installation detected.${NC}"
@@ -86,6 +116,11 @@ if download_file "$RAW_URL/core/config.sh" "$MAGIC_DIR/core/config.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
+    echo ""
+    echo "${RED}Error: Failed to download core configuration file${NC}"
+    echo "URL attempted: $RAW_URL/core/config.sh"
+    echo ""
+    echo "Please ensure the repository has been properly set up."
     exit 1
 fi
 
@@ -126,7 +161,7 @@ cat > "$MAGIC_DIR/installed/ms.msmeta" << EOF
 command=ms
 version=0.0.1
 registry_name=ms
-registry_url=https://raw.githubusercontent.com/nulLeeKH/magicscripts/refs/heads/main/core/ms.msreg
+registry_url=https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msreg
 checksum=a7f93a63
 installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 script_path=$MAGIC_DIR/scripts/ms.sh
