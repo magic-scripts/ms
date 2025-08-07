@@ -4,7 +4,7 @@
 #   config|key|default_value|description|category|scripts (for configurations)
 
 # Core Commands
-command|ms|https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.sh|Magic Scripts main interface|core|0.0.1|e17f82cf
+command|ms|https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.sh|Magic Scripts main interface|core|0.0.1|d0d92cec
 command|gigen|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/gitignore-gen.sh|.gitignore template generator|development|0.0.1|77fe84f2
 command|pgadduser|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/postgres-adduser.sh|PostgreSQL user and database setup|database|0.0.1|0f87c9bd
 command|dcwinit|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/docker-compose-init.sh|Docker Compose wireframe generator|docker|0.0.1|ef4c4b71
