@@ -989,14 +989,11 @@ install_script() {
         # If different version, need to reinstall - remove old version first
         rm -f "$INSTALL_DIR/$cmd"
         remove_installation_metadata "$cmd"
-        # Remove old script file if exists
-        local old_script_path="$MAGIC_DATA_DIR/scripts/*"
-        for script in $old_script_path; do
-            if [ -f "$script" ] && grep -q "^#!/" "$script" && grep -q "$cmd" "$script"; then
-                rm -f "$script"
-                break
-            fi
-        done
+        # Remove old script file if exists (exact match only)
+        local old_script_file="$MAGIC_DATA_DIR/scripts/$cmd.sh"
+        if [ -f "$old_script_file" ]; then
+            rm -f "$old_script_file"
+        fi
     fi
     
     # Use registry version as target version
