@@ -1809,7 +1809,7 @@ handle_update() {
         
         # Use update.sh for ms update
         local update_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh"
-        local temp_update=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
+        local temp_update=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
         
         printf "  Downloading update script... "
         if command -v curl >/dev/null 2>&1; then
@@ -1950,7 +1950,7 @@ handle_update() {
             upgrade_script="$MAGIC_SCRIPT_DIR/core/installer/update.sh"
         else
             # Download upgrade script from GitHub
-            local temp_upgrade=$(mktemp --suffix=.sh) || { echo "Error: Cannot create temp file" >&2; return 1; }
+            local temp_upgrade=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
             if command -v curl >/dev/null 2>&1; then
                 if curl -fsSL "https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh" -o "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
