@@ -204,8 +204,9 @@ update_shell_config() {
     local path_line='export PATH="$HOME/.local/bin/ms:$PATH"'
     local manpath_line='export MANPATH="$HOME/.local/share/man:$MANPATH"'
     
-    # Check if already exists
-    if grep -q "export PATH.*\.local/bin/ms" "$shell_config" 2>/dev/null; then
+    # Check if already exists with proper installer comment
+    if grep -q "# Magic Scripts - added by installer" "$shell_config" 2>/dev/null && \
+       grep -q "export PATH.*\.local/bin/ms" "$shell_config" 2>/dev/null; then
         echo "${GREEN}PATH configuration already exists in $shell_config${NC}"
         
         # Check if MANPATH needs to be added
@@ -215,6 +216,14 @@ update_shell_config() {
             return 0
         fi
         return 1
+    fi
+    
+    # If PATH exists but without proper installer comment, remove it first
+    if grep -q "export PATH.*\.local/bin/ms" "$shell_config" 2>/dev/null; then
+        echo "${YELLOW}Found existing PATH configuration without installer comment, updating...${NC}"
+        # Remove existing line
+        grep -v "export PATH.*\.local/bin/ms" "$shell_config" > "$shell_config.tmp"
+        mv "$shell_config.tmp" "$shell_config"
     fi
     
     # Add configuration
