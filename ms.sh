@@ -1103,43 +1103,32 @@ EOF
     
     # Execute install script if provided
     if [ -n "$install_hook_script" ] && [ "$install_hook_script" != "" ]; then
-        echo "  Running install script for $cmd..."
-        local temp_install_script=$(mktemp) || { echo "${RED}Error: Cannot create temp file for install script${NC}" >&2; return 1; }
+        echo "  ${CYAN}Running install script for $cmd...${NC}"
+        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
         
-        # Download install script
-        local download_success=false
+        # Execute install script directly from URL - no temp files
+        local install_success=false
         if command -v curl >/dev/null 2>&1; then
-            if curl -fsSL "$install_hook_script" -o "$temp_install_script" 2>/dev/null; then
-                download_success=true
+            if curl -fsSL "$install_hook_script" | sh -s -- "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                install_success=true
             fi
         elif command -v wget >/dev/null 2>&1; then
-            if wget -q "$install_hook_script" -O "$temp_install_script" 2>/dev/null; then
-                download_success=true
+            if wget -qO- "$install_hook_script" | sh -s -- "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                install_success=true
             fi
+        else
+            echo "${RED}Error: curl or wget required for install script${NC}" >&2
         fi
         
-        if [ "$download_success" = true ]; then
-            chmod +x "$temp_install_script"
-            
-            echo "  ${CYAN}Running install script for $cmd...${NC}"
-            echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-            
-            # Execute install script with context - allow user interaction
-            if ! "$temp_install_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                echo "${RED}Install script failed for $cmd${NC}" >&2
-                # Clean up on failure
-                rm -f "$INSTALL_DIR/$cmd" 2>/dev/null
-                rm -f "$target_script" 2>/dev/null
-                rm -f "$temp_install_script" 2>/dev/null
-                return 1
-            fi
-            
-            echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+        if [ "$install_success" = true ]; then
             echo "  ${GREEN}Install script completed successfully${NC}"
-            rm -f "$temp_install_script" 2>/dev/null
         else
-            echo "${YELLOW}Warning: Could not download install script from $install_hook_script${NC}" >&2
+            echo "${RED}Install script failed for $cmd${NC}" >&2
+            # Clean up on failure
+            rm -f "$INSTALL_DIR/$cmd" 2>/dev/null
+            rm -f "$target_script" 2>/dev/null
+            return 1
         fi
     fi
     
@@ -1265,43 +1254,32 @@ handle_uninstall() {
             # Execute uninstall script if exists
             local uninstall_script_url=$(get_installation_metadata "$cmd" "uninstall_script_url")
             if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
-                echo "  Running uninstall script for $cmd..."
-                local temp_uninstall_script=$(mktemp) || { echo "${RED}Error: Cannot create temp file for uninstall script${NC}" >&2; }
+                echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
+                echo "  ${YELLOW}═══════════════════════════════════════${NC}"
                 
-                # Download uninstall script
-                local download_success=false
+                # Execute uninstall script directly from URL - no temp files
+                local uninstall_success=false
+                local version=$(get_installation_metadata "$cmd" "version")
+                local script_path=$(get_installation_metadata "$cmd" "script_path")
+                local registry_name=$(get_installation_metadata "$cmd" "registry_name")
+                
                 if command -v curl >/dev/null 2>&1; then
-                    if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall_script" 2>/dev/null; then
-                        download_success=true
+                    if curl -fsSL "$uninstall_script_url" | sh -s -- "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                        uninstall_success=true
                     fi
                 elif command -v wget >/dev/null 2>&1; then
-                    if wget -q "$uninstall_script_url" -O "$temp_uninstall_script" 2>/dev/null; then
-                        download_success=true
+                    if wget -qO- "$uninstall_script_url" | sh -s -- "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                        uninstall_success=true
                     fi
+                else
+                    echo "${RED}Error: curl or wget required for uninstall script${NC}" >&2
                 fi
                 
-                if [ "$download_success" = true ]; then
-                    chmod +x "$temp_uninstall_script"
-                    
-                    echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
-                    echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                    
-                    # Execute uninstall script with context - allow user interaction
-                    local version=$(get_installation_metadata "$cmd" "version")
-                    local script_path=$(get_installation_metadata "$cmd" "script_path")
-                    local registry_name=$(get_installation_metadata "$cmd" "registry_name")
-                    
-                    if ! "$temp_uninstall_script" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                        echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
-                    else
-                        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                        echo "  ${GREEN}Uninstall script completed successfully${NC}"
-                    fi
-                    
-                    rm -f "$temp_uninstall_script" 2>/dev/null
+                echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+                if [ "$uninstall_success" = true ]; then
+                    echo "  ${GREEN}Uninstall script completed successfully${NC}"
                 else
-                    echo "${YELLOW}Warning: Could not download uninstall script from $uninstall_script_url${NC}" >&2
+                    echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
                 fi
             fi
             
@@ -1697,43 +1675,32 @@ handle_reinstall() {
             local uninstall_script_url=$(get_installation_metadata "$base_cmd" "uninstall_script_url")
             if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
                 echo ""
-                echo "    Running uninstall script for $base_cmd..."
-                local temp_uninstall_script=$(mktemp) || { echo "${RED}Error: Cannot create temp file for uninstall script${NC}" >&2; }
+                echo "    ${CYAN}Running uninstall script for $base_cmd...${NC}"
+                echo "    ${YELLOW}═══════════════════════════════════════${NC}"
                 
-                # Download uninstall script
-                local download_success=false
+                # Execute uninstall script directly from URL - no temp files
+                local uninstall_success=false
+                local old_version=$(get_installation_metadata "$base_cmd" "version")
+                local script_path=$(get_installation_metadata "$base_cmd" "script_path")
+                local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
+                
                 if command -v curl >/dev/null 2>&1; then
-                    if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall_script" 2>/dev/null; then
-                        download_success=true
+                    if curl -fsSL "$uninstall_script_url" | sh -s -- "$base_cmd" "$old_version" "$script_path" "$INSTALL_DIR/$base_cmd" "$registry_name" < /dev/tty; then
+                        uninstall_success=true
                     fi
                 elif command -v wget >/dev/null 2>&1; then
-                    if wget -q "$uninstall_script_url" -O "$temp_uninstall_script" 2>/dev/null; then
-                        download_success=true
+                    if wget -qO- "$uninstall_script_url" | sh -s -- "$base_cmd" "$old_version" "$script_path" "$INSTALL_DIR/$base_cmd" "$registry_name" < /dev/tty; then
+                        uninstall_success=true
                     fi
+                else
+                    echo "${RED}Error: curl or wget required for uninstall script${NC}" >&2
                 fi
                 
-                if [ "$download_success" = true ]; then
-                    chmod +x "$temp_uninstall_script"
-                    
-                    echo "    ${CYAN}Running uninstall script for $base_cmd...${NC}"
-                    echo "    ${YELLOW}═══════════════════════════════════════${NC}"
-                    
-                    # Execute uninstall script with context - allow user interaction
-                    local old_version=$(get_installation_metadata "$base_cmd" "version")
-                    local script_path=$(get_installation_metadata "$base_cmd" "script_path")
-                    local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
-                    
-                    if ! "$temp_uninstall_script" "$base_cmd" "$old_version" "$script_path" "$INSTALL_DIR/$base_cmd" "$registry_name" < /dev/tty; then
-                        echo "    ${YELLOW}═══════════════════════════════════════${NC}"
-                        echo "    ${YELLOW}Warning: Uninstall script failed, proceeding with reinstall${NC}" >&2
-                    else
-                        echo "    ${YELLOW}═══════════════════════════════════════${NC}"
-                        echo "    ${GREEN}Uninstall script completed successfully${NC}"
-                    fi
-                    
-                    rm -f "$temp_uninstall_script" 2>/dev/null
+                echo "    ${YELLOW}═══════════════════════════════════════${NC}"
+                if [ "$uninstall_success" = true ]; then
+                    echo "    ${GREEN}Uninstall script completed successfully${NC}"
                 else
-                    echo "    ${YELLOW}Warning: Could not download uninstall script${NC}" >&2
+                    echo "    ${YELLOW}Warning: Uninstall script failed, proceeding with reinstall${NC}" >&2
                 fi
                 printf "  Continuing reinstallation of ${CYAN}%s${NC}... " "$cmd"
             fi
