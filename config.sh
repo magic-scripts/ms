@@ -29,7 +29,7 @@ ms_internal_get_config_registry_file() {
             
             if [ -f "$reg_file" ]; then
                 # Get all commands from .msreg and fetch their .msver files for config info
-                grep "^command|" "$reg_file" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+                grep -v "^#" "$reg_file" 2>/dev/null | grep -v "^$" | while IFS='|' read -r cmd msver_url desc category; do
                     [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
                     
                     # Download and parse .msver file for config entries
@@ -51,7 +51,7 @@ ms_internal_get_config_registry_file() {
     
     # Fallback to development registry (also 2-tier now)
     if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" 2>/dev/null | grep -v "^$" | while IFS='|' read -r cmd msver_url desc category; do
             [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
             
             if command -v download_and_parse_msver >/dev/null 2>&1; then
@@ -611,7 +611,7 @@ ms_internal_list_config_values() {
             # Get config keys from specific registry
             local reg_file="${REG_DIR}/${registry_filter}.msreg"
             if [ -f "$reg_file" ]; then
-                grep "^command|" "$reg_file" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+                grep -v "^#" "$reg_file" 2>/dev/null | grep -v "^$" | while IFS='|' read -r cmd msver_url desc category; do
                     [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
                     
                     if command -v download_and_parse_msver >/dev/null 2>&1; then

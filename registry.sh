@@ -294,7 +294,7 @@ get_all_commands() {
             
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                grep "^command|" "$reg_file" | while IFS='|' read -r prefix cmd script desc category; do
+                grep -v "^#" "$reg_file" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
                     if [ -n "$cmd" ] && ! grep -q "^$cmd$" "$temp_commands" 2>/dev/null; then
                         echo "$cmd" >> "$temp_commands"
                     fi
@@ -316,7 +316,7 @@ get_script_info() {
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        local result=$(grep "^command|$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | head -1)
+        local result=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | head -1)
         if [ -n "$result" ]; then
             echo "$result"
             return 0
@@ -332,7 +332,7 @@ get_script_info() {
             
             reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                local result=$(grep "^command|$cmd|" "$reg_file" | head -1)
+                local result=$(grep "^$cmd|" "$reg_file" | head -1)
                 if [ -n "$result" ]; then
                     echo "$result"
                     return 0
@@ -362,7 +362,7 @@ get_registry_commands() {
     local reg_file="$REG_DIR/${registry_name}.msreg"
     
     if [ -f "$reg_file" ]; then
-        grep "^command|" "$reg_file"
+        grep -v "^#" "$reg_file" | grep -v "^$"
     else
         return 1
     fi
@@ -414,7 +414,7 @@ search_commands() {
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | while IFS='|' read -r prefix cmd script desc category; do
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
             [ -z "$cmd" ] && continue
             
             if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
@@ -434,7 +434,7 @@ search_commands() {
             
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                grep "^command|" "$reg_file" | while IFS='|' read -r prefix cmd script desc category; do
+                grep -v "^#" "$reg_file" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
                     [ -z "$cmd" ] && continue
                     
                     if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
@@ -529,7 +529,7 @@ get_command_info() {
     
     # Check development registry first
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        cmd_meta=$(grep "^command|$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | head -1)
+        cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | head -1)
     fi
     
     # Fallback to cached registries
@@ -541,7 +541,7 @@ get_command_info() {
             
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                cmd_meta=$(grep "^command|$cmd|" "$reg_file" | head -1)
+                cmd_meta=$(grep "^$cmd|" "$reg_file" | head -1)
                 [ -n "$cmd_meta" ] && break
             fi
         done < "$REGLIST_FILE"
@@ -551,12 +551,11 @@ get_command_info() {
         return 1
     fi
     
-    # Parse command metadata: command|name|msver_url|description|category
-    local prefix=$(echo "$cmd_meta" | cut -d'|' -f1)
-    local name=$(echo "$cmd_meta" | cut -d'|' -f2)
-    local msver_url=$(echo "$cmd_meta" | cut -d'|' -f3)
-    local description=$(echo "$cmd_meta" | cut -d'|' -f4)
-    local category=$(echo "$cmd_meta" | cut -d'|' -f5)
+    # Parse command metadata: name|msver_url|description|category
+    local name=$(echo "$cmd_meta" | cut -d'|' -f1)
+    local msver_url=$(echo "$cmd_meta" | cut -d'|' -f2)
+    local description=$(echo "$cmd_meta" | cut -d'|' -f3)
+    local category=$(echo "$cmd_meta" | cut -d'|' -f4)
     
     # Now get version info from .msver file
     local version_info=""

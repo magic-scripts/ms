@@ -117,9 +117,8 @@ find_best_ms_version() {
     fi
     
     # Parse registry for ms command - now handling 2-tier system
-    # New format: command|name|msver_url|description|category|msver_checksum
-    while IFS='|' read -r cmd_type name msver_url desc category msver_checksum; do
-        [ "$cmd_type" = "command" ] || continue
+    # New format: name|msver_url|description|category|msver_checksum
+    while IFS='|' read -r name msver_url desc category msver_checksum; do
         [ "$name" = "ms" ] || continue
         
         # Download and parse ms.msver file

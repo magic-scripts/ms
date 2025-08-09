@@ -631,7 +631,7 @@ install_commands_with_detection() {
                     local registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
                     
                     # In 2-tier system, just check if command exists by name in .msreg
-                    local cmd_info=$(echo "$registry_commands" | grep "^command|$base_cmd|" | head -1)
+                    local cmd_info=$(echo "$registry_commands" | grep "^$base_cmd|" | head -1)
                     
                     if [ -n "$cmd_info" ]; then
                         # Now check if requested version is available in .msver
@@ -653,10 +653,10 @@ install_commands_with_detection() {
                         if [ -n "$version_info" ]; then
                             found_registries+=("$registry_name")
                             # Create registry info with version information: command|name|msver_url|desc|category|version
-                            local name=$(echo "$cmd_info" | cut -d'|' -f2)
-                            local msver_url=$(echo "$cmd_info" | cut -d'|' -f3)
-                            local desc=$(echo "$cmd_info" | cut -d'|' -f4)
-                            local category=$(echo "$cmd_info" | cut -d'|' -f5)
+                            local name=$(echo "$cmd_info" | cut -d'|' -f1)
+                            local msver_url=$(echo "$cmd_info" | cut -d'|' -f2)
+                            local desc=$(echo "$cmd_info" | cut -d'|' -f3)
+                            local category=$(echo "$cmd_info" | cut -d'|' -f4)
                             local version=$(echo "$version_info" | cut -d'|' -f2)
                             
                             registry_info+=("command|$name|$msver_url|$desc|$category|$version")
@@ -1658,7 +1658,7 @@ handle_reinstall() {
                         registry_name="ms"  # Default fallback
                         if command -v get_registry_names >/dev/null 2>&1; then
                             for reg in $(get_registry_names); do
-                                if get_registry_commands "$reg" 2>/dev/null | grep -q "^command|$base_cmd|"; then
+                                if get_registry_commands "$reg" 2>/dev/null | grep -q "^$base_cmd|"; then
                                     registry_name="$reg"
                                     break
                                 fi
