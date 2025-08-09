@@ -30,7 +30,7 @@ ms upgrade
 ms search
 
 # Install all commands from default registry  
-ms install -r ms
+ms install -r default
 
 # Configure your settings
 ms config set AUTHOR_NAME "Your Name"
