@@ -237,6 +237,9 @@ suggest_similar_command() {
         list|ls)
             echo "search"
             ;;
+        find)
+            echo "search"
+            ;;
         info|show)
             echo "status"
             ;;
