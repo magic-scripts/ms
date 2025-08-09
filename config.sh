@@ -37,8 +37,8 @@ ms_internal_get_config_registry_file() {
                         download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
                     else
                         # Fallback: try to source registry.sh if not available
-                        if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh" ]; then
-                            . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh"
+                        if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/registry.sh" ]; then
+                            . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/registry.sh"
                             if command -v download_and_parse_msver >/dev/null 2>&1; then
                                 download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | sed 's/^config|//' | sed 's/|/:/g' >> "$merged_file"
                             fi
@@ -50,8 +50,8 @@ ms_internal_get_config_registry_file() {
     fi
     
     # Fallback to development registry (also 2-tier now)
-    if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" ]; then
-        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/core/ms.msreg" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
+    if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
+        grep "^command|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" 2>/dev/null | while IFS='|' read -r prefix cmd msver_url desc category; do
             [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
             
             if command -v download_and_parse_msver >/dev/null 2>&1; then
@@ -623,8 +623,8 @@ ms_internal_list_config_values() {
                         done
                     else
                         # Fallback: try to source registry.sh if not available
-                        if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh" ]; then
-                            . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/core/registry.sh"
+                        if [ -f "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/registry.sh" ]; then
+                            . "${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}/registry.sh"
                             if command -v download_and_parse_msver >/dev/null 2>&1; then
                                 download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^config|" | while IFS='|' read -r config_prefix key default desc cat scripts; do
                                     printf "%-20s [%s]: %s\n" "$key" "${cat:-misc}" "$desc"

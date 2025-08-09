@@ -43,7 +43,7 @@ if [ ! -f "$INSTALL_DIR/ms" ] || [ ! -d "$MAGIC_DIR" ]; then
     echo "${RED}Error: Magic Scripts doesn't appear to be installed.${NC}"
     echo ""
     echo "Please run the installer first:"
-    echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh${NC}"
+    echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh${NC}"
     exit 1
 fi
 
@@ -52,7 +52,7 @@ echo ""
 
 # Update core files
 printf "  Downloading config.sh... "
-if download_file "$RAW_URL/core/config.sh" "$MAGIC_DIR/core/config.sh"; then
+if download_file "$RAW_URL/config.sh" "$MAGIC_DIR/config.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -60,7 +60,7 @@ else
 fi
 
 printf "  Downloading registry.sh... "
-if download_file "$RAW_URL/core/registry.sh" "$MAGIC_DIR/core/registry.sh"; then
+if download_file "$RAW_URL/registry.sh" "$MAGIC_DIR/registry.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -68,7 +68,7 @@ else
 fi
 
 printf "  Downloading ms.sh... "
-if download_file "$RAW_URL/core/ms.sh" "$MAGIC_DIR/scripts/ms.sh"; then
+if download_file "$RAW_URL/ms.sh" "$MAGIC_DIR/scripts/ms.sh"; then
     chmod +x "$MAGIC_DIR/scripts/ms.sh"
     printf "${GREEN}done${NC}\n"
 else

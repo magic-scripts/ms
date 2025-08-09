@@ -8,16 +8,16 @@ A comprehensive collection of developer automation tools for streamlined project
 
 ```bash
 # Install latest stable version (recommended)
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v 0.0.1
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh -s -- -v 0.0.1
 
 # Install development version
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh -s -- -v dev -d
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh -s -- -v dev -d
 
 # Using wget instead of curl
-wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh
 ```
 
 ### First Steps
@@ -41,7 +41,7 @@ ms config set AUTHOR_EMAIL "your@email.com"
 
 ```bash
 # Uninstall Magic Scripts
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh | sh
 ```
 
 ## 📖 Documentation
@@ -121,10 +121,10 @@ VERSION="0.0.1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Load config system
-if [ -f "$SCRIPT_DIR/../core/config.sh" ]; then
-    . "$SCRIPT_DIR/../core/config.sh"
-elif [ -f "$HOME/.local/share/magicscripts/core/config.sh" ]; then
-    . "$HOME/.local/share/magicscripts/core/config.sh"
+if [ -f "$SCRIPT_DIR/../config.sh" ]; then
+    . "$SCRIPT_DIR/../config.sh"
+elif [ -f "$HOME/.local/share/magicscripts/config.sh" ]; then
+    . "$HOME/.local/share/magicscripts/config.sh"
 fi
 
 # Get configuration values

@@ -36,7 +36,7 @@ Thank you for your interest in contributing to Magic Scripts! This document prov
 
 5. **Update Registry (if adding new commands)**
    ```bash
-   # Add entry to core/ms.msreg with correct checksum
+   # Add entry to ms.msreg with correct checksum
    # Use develop branch URL for dev testing
    ```
 
@@ -101,7 +101,7 @@ docs(readme): update branch strategy documentation
 
 4. **Update Registry**
    ```bash
-   # Update core/ms.msreg with new version entries
+   # Update ms.msreg with new version entries
    # Point to release/v0.0.2 branch for immutable references
    ```
 

@@ -138,4 +138,4 @@ fi
 echo "Thank you for using Magic Scripts!"
 echo ""
 echo "If you want to reinstall in the future:"
-echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh | sh${NC}"
+echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh${NC}"

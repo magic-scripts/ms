@@ -16,7 +16,7 @@ TEMP_DIR="$HOME/.cache/magicscripts-$$"
 # URLs
 REPO_URL="https://github.com/magic-scripts/ms"
 RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/main"
-REGISTRY_URL="$RAW_URL/core/ms.msreg"
+REGISTRY_URL="$RAW_URL/ms.msreg"
 
 # Version parameters
 REQUESTED_VERSION=""
@@ -336,7 +336,7 @@ mkdir -p "$MAGIC_DIR/scripts"
 
 # Download core files (version-independent)
 printf "  Downloading config.sh... "
-if download_file "$RAW_URL/core/config.sh" "$MAGIC_DIR/core/config.sh"; then
+if download_file "$RAW_URL/config.sh" "$MAGIC_DIR/config.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -346,7 +346,7 @@ else
 fi
 
 printf "  Downloading registry.sh... "
-if download_file "$RAW_URL/core/registry.sh" "$MAGIC_DIR/core/registry.sh"; then
+if download_file "$RAW_URL/registry.sh" "$MAGIC_DIR/registry.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -393,7 +393,7 @@ chmod 755 "$INSTALL_DIR/ms"
 printf "  Installing man page... "
 MAN_DIR="$HOME/.local/share/man/man1"
 mkdir -p "$MAN_DIR"
-if download_file "$RAW_URL/core/ms.1" "$MAN_DIR/ms.1"; then
+if download_file "$RAW_URL/ms.1" "$MAN_DIR/ms.1"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${YELLOW}failed${NC}\n"

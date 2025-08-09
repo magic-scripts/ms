@@ -8,10 +8,10 @@ MAGIC_SCRIPT_DIR="${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}"
 
 # Try to load libraries
 for lib in config.sh registry.sh; do
-    if [ -f "$MAGIC_SCRIPT_DIR/core/$lib" ]; then
-        . "$MAGIC_SCRIPT_DIR/core/$lib"
-    elif [ -f "$SCRIPT_DIR/../core/$lib" ]; then
-        . "$SCRIPT_DIR/../core/$lib"
+    if [ -f "$MAGIC_SCRIPT_DIR/$lib" ]; then
+        . "$MAGIC_SCRIPT_DIR/$lib"
+    elif [ -f "$SCRIPT_DIR/../$lib" ]; then
+        . "$SCRIPT_DIR/../$lib"
     fi
 done
 
@@ -1092,7 +1092,7 @@ EOF
     
     # Last fallback to default URL
     if [ "$registry_url" = "unknown" ] || [ -z "$registry_url" ]; then
-        registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/ms.msreg"
+        registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
     fi
     
     # Record comprehensive installation metadata
@@ -1158,7 +1158,7 @@ handle_uninstall() {
             echo "  ${YELLOW}Uninstalling Magic Scripts core...${NC}"
             
             # Use uninstall.sh for ms uninstall
-            local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
+            local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh"
             local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
             
             printf "    Downloading uninstall script... "
@@ -1706,7 +1706,7 @@ handle_ms_force_reinstall() {
     # Step 1: Run uninstall script
     echo "${CYAN}Step 1: Uninstalling current Magic Scripts...${NC}"
     echo "─────────────────────────────────────────"
-    local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/uninstall.sh"
+    local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh"
     local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
     printf "  Downloading uninstall script... "
@@ -1750,7 +1750,7 @@ handle_ms_force_reinstall() {
     echo "─────────────────────────────────────────"
     
     # Step 2: Run install script
-    local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/install.sh"
+    local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh"
     local temp_install=$(mktemp) || { 
         echo "${RED}Error: Cannot create temp file${NC}" >&2
         return 1
@@ -1808,7 +1808,7 @@ handle_update() {
         echo "${YELLOW}Updating Magic Scripts core...${NC}"
         
         # Use update.sh for ms update
-        local update_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh"
+        local update_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh"
         local temp_update=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
         
         printf "  Downloading update script... "
@@ -1946,20 +1946,20 @@ handle_update() {
         local upgrade_script=""
         if [ -f "$SCRIPT_DIR/installer/update.sh" ]; then
             upgrade_script="$SCRIPT_DIR/installer/update.sh"
-        elif [ -f "$MAGIC_SCRIPT_DIR/core/installer/update.sh" ]; then
-            upgrade_script="$MAGIC_SCRIPT_DIR/core/installer/update.sh"
+        elif [ -f "$MAGIC_SCRIPT_DIR/installer/update.sh" ]; then
+            upgrade_script="$MAGIC_SCRIPT_DIR/installer/update.sh"
         else
             # Download upgrade script from GitHub
             local temp_upgrade=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
             if command -v curl >/dev/null 2>&1; then
-                if curl -fsSL "https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh" -o "$temp_upgrade"; then
+                if curl -fsSL "https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh" -o "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
                     exit 1
                 fi
             elif command -v wget >/dev/null 2>&1; then
-                if wget -q "https://raw.githubusercontent.com/magic-scripts/ms/main/core/installer/update.sh" -O "$temp_upgrade"; then
+                if wget -q "https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh" -O "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
