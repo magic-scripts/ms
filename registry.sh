@@ -10,7 +10,7 @@ REG_DIR="$HOME/.local/share/magicscripts/reg"
 REGLIST_FILE="$REG_DIR/reglist"
 
 # Default registry URL
-DEFAULT_REGISTRY_NAME="ms"
+DEFAULT_REGISTRY_NAME="default"
 DEFAULT_REGISTRY_URL="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
 
 # Initialize registry directories and default reglist
@@ -529,9 +529,12 @@ get_command_info() {
     # First get command metadata from .msreg files
     local cmd_meta=""
     
-    # Check development registry first
-    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | head -1)
+    # Check development registry first (if in development environment)
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
+    if [ -f "$script_dir/ms.msreg" ]; then
+        cmd_meta=$(grep "^$cmd|" "$script_dir/ms.msreg" | head -1)
+    elif [ -n "${MAGIC_SCRIPT_DIR:-}" ] && [ -f "${MAGIC_SCRIPT_DIR}/ms.msreg" ]; then
+        cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR}/ms.msreg" | head -1)
     fi
     
     # Fallback to cached registries
