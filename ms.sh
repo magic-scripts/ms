@@ -145,9 +145,11 @@ get_script_info() {
                     local ver=$(echo "$version_info" | cut -d'|' -f2)
                     local url=$(echo "$version_info" | cut -d'|' -f3)  
                     local checksum=$(echo "$version_info" | cut -d'|' -f4)
+                    local install_script=$(echo "$version_info" | cut -d'|' -f5)
+                    local uninstall_script=$(echo "$version_info" | cut -d'|' -f6)
                     
-                    # Return in old format: command|name|script_uri|description|category|version|checksum
-                    echo "command|$name|$url|$description|$category|$ver|$checksum"
+                    # Return in extended format: command|name|script_uri|description|category|version|checksum|install_script|uninstall_script
+                    echo "command|$name|$url|$description|$category|$ver|$checksum|$install_script|$uninstall_script"
                     return 0
                 fi
             fi
@@ -708,10 +710,12 @@ install_commands_with_detection() {
             
             local install_result
             if [ -n "$version_info" ]; then
-                # Extract script URL from version info: version|version_name|script_url|checksum
+                # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script
                 local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
+                local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
                 
-                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version"
+                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script"
                 install_result=$?
             else
                 echo "${RED}no version available${NC}"
@@ -960,6 +964,8 @@ install_script() {
     local registry_name="$3"  # Registry name that provided the command
     local version="$4"        # Version being installed
     local force_flag="$5"     # Optional: "force" to force reinstall
+    local install_hook_script="$6"  # Optional: install script URL
+    local uninstall_hook_script="$7"  # Optional: uninstall script URL
     
     # Handle legacy calls without version parameter
     if [ "$4" = "force" ]; then
@@ -1095,8 +1101,50 @@ EOF
         registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
     fi
     
+    # Execute install script if provided
+    if [ -n "$install_hook_script" ] && [ "$install_hook_script" != "" ]; then
+        echo "  Running install script for $cmd..."
+        local temp_install_script=$(mktemp) || { echo "${RED}Error: Cannot create temp file for install script${NC}" >&2; return 1; }
+        
+        # Download install script
+        local download_success=false
+        if command -v curl >/dev/null 2>&1; then
+            if curl -fsSL "$install_hook_script" -o "$temp_install_script" 2>/dev/null; then
+                download_success=true
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if wget -q "$install_hook_script" -O "$temp_install_script" 2>/dev/null; then
+                download_success=true
+            fi
+        fi
+        
+        if [ "$download_success" = true ]; then
+            chmod +x "$temp_install_script"
+            
+            echo "  ${CYAN}Running install script for $cmd...${NC}"
+            echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+            
+            # Execute install script with context - allow user interaction
+            if ! "$temp_install_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+                echo "${RED}Install script failed for $cmd${NC}" >&2
+                # Clean up on failure
+                rm -f "$INSTALL_DIR/$cmd" 2>/dev/null
+                rm -f "$target_script" 2>/dev/null
+                rm -f "$temp_install_script" 2>/dev/null
+                return 1
+            fi
+            
+            echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+            echo "  ${GREEN}Install script completed successfully${NC}"
+            rm -f "$temp_install_script" 2>/dev/null
+        else
+            echo "${YELLOW}Warning: Could not download install script from $install_hook_script${NC}" >&2
+        fi
+    fi
+    
     # Record comprehensive installation metadata
-    set_installation_metadata "$cmd" "$target_version" "$final_registry_name" "$registry_url" "$registry_checksum" "$target_script"
+    set_installation_metadata "$cmd" "$target_version" "$final_registry_name" "$registry_url" "$registry_checksum" "$target_script" "$uninstall_hook_script"
     
     # Verify installation integrity
     verify_command_checksum "$cmd"
@@ -1214,6 +1262,49 @@ handle_uninstall() {
                 fi
             fi
             
+            # Execute uninstall script if exists
+            local uninstall_script_url=$(get_installation_metadata "$cmd" "uninstall_script_url")
+            if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
+                echo "  Running uninstall script for $cmd..."
+                local temp_uninstall_script=$(mktemp) || { echo "${RED}Error: Cannot create temp file for uninstall script${NC}" >&2; }
+                
+                # Download uninstall script
+                local download_success=false
+                if command -v curl >/dev/null 2>&1; then
+                    if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall_script" 2>/dev/null; then
+                        download_success=true
+                    fi
+                elif command -v wget >/dev/null 2>&1; then
+                    if wget -q "$uninstall_script_url" -O "$temp_uninstall_script" 2>/dev/null; then
+                        download_success=true
+                    fi
+                fi
+                
+                if [ "$download_success" = true ]; then
+                    chmod +x "$temp_uninstall_script"
+                    
+                    echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
+                    echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+                    
+                    # Execute uninstall script with context - allow user interaction
+                    local version=$(get_installation_metadata "$cmd" "version")
+                    local script_path=$(get_installation_metadata "$cmd" "script_path")
+                    local registry_name=$(get_installation_metadata "$cmd" "registry_name")
+                    
+                    if ! "$temp_uninstall_script" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+                        echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
+                    else
+                        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+                        echo "  ${GREEN}Uninstall script completed successfully${NC}"
+                    fi
+                    
+                    rm -f "$temp_uninstall_script" 2>/dev/null
+                else
+                    echo "${YELLOW}Warning: Could not download uninstall script from $uninstall_script_url${NC}" >&2
+                fi
+            fi
+            
             rm "$INSTALL_DIR/$cmd"
             echo "  ${GREEN}Removed${NC}: $cmd$registry_info"
             removed_count=$((removed_count + 1))
@@ -1319,6 +1410,7 @@ set_installation_metadata() {
     local registry_url="$4"  
     local checksum="$5"
     local script_path="$6"
+    local uninstall_script_url="$7"  # Optional: uninstall script URL
     
     local installed_dir="$HOME/.local/share/magicscripts/installed"
     local meta_file="$installed_dir/$cmd.msmeta"
@@ -1334,6 +1426,7 @@ registry_url=${registry_url:-unknown}
 checksum=${checksum:-unknown}
 installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
 script_path=${script_path:-unknown}
+uninstall_script_url=${uninstall_script_url:-}
 EOF
 }
 
@@ -1598,9 +1691,53 @@ handle_reinstall() {
         
         printf "  Reinstalling ${CYAN}%s${NC}... " "$cmd"
         
-        # First, uninstall the command
+        # First, execute uninstall script if exists (before removing files)
         local INSTALL_DIR="$HOME/.local/bin/ms"
         if [ -f "$INSTALL_DIR/$base_cmd" ]; then
+            local uninstall_script_url=$(get_installation_metadata "$base_cmd" "uninstall_script_url")
+            if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
+                echo ""
+                echo "    Running uninstall script for $base_cmd..."
+                local temp_uninstall_script=$(mktemp) || { echo "${RED}Error: Cannot create temp file for uninstall script${NC}" >&2; }
+                
+                # Download uninstall script
+                local download_success=false
+                if command -v curl >/dev/null 2>&1; then
+                    if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall_script" 2>/dev/null; then
+                        download_success=true
+                    fi
+                elif command -v wget >/dev/null 2>&1; then
+                    if wget -q "$uninstall_script_url" -O "$temp_uninstall_script" 2>/dev/null; then
+                        download_success=true
+                    fi
+                fi
+                
+                if [ "$download_success" = true ]; then
+                    chmod +x "$temp_uninstall_script"
+                    
+                    echo "    ${CYAN}Running uninstall script for $base_cmd...${NC}"
+                    echo "    ${YELLOW}═══════════════════════════════════════${NC}"
+                    
+                    # Execute uninstall script with context - allow user interaction
+                    local old_version=$(get_installation_metadata "$base_cmd" "version")
+                    local script_path=$(get_installation_metadata "$base_cmd" "script_path")
+                    local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
+                    
+                    if ! "$temp_uninstall_script" "$base_cmd" "$old_version" "$script_path" "$INSTALL_DIR/$base_cmd" "$registry_name" < /dev/tty; then
+                        echo "    ${YELLOW}═══════════════════════════════════════${NC}"
+                        echo "    ${YELLOW}Warning: Uninstall script failed, proceeding with reinstall${NC}" >&2
+                    else
+                        echo "    ${YELLOW}═══════════════════════════════════════${NC}"
+                        echo "    ${GREEN}Uninstall script completed successfully${NC}"
+                    fi
+                    
+                    rm -f "$temp_uninstall_script" 2>/dev/null
+                else
+                    echo "    ${YELLOW}Warning: Could not download uninstall script${NC}" >&2
+                fi
+                printf "  Continuing reinstallation of ${CYAN}%s${NC}... " "$cmd"
+            fi
+            
             rm -f "$INSTALL_DIR/$base_cmd"
         fi
         
@@ -1650,6 +1787,8 @@ handle_reinstall() {
                 if [ -n "$version_info" ]; then
                     local version_name=$(echo "$version_info" | cut -d'|' -f2)
                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                    local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
+                    local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
                     
                     # Get the registry name from metadata or find which registry has this command
                     local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
@@ -1666,7 +1805,7 @@ handle_reinstall() {
                         fi
                     fi
                     
-                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force"; then
+                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force" "$install_hook_script" "$uninstall_hook_script"; then
                         echo "${GREEN}done${NC}"
                         reinstall_count=$((reinstall_count + 1))
                     else

@@ -1,8 +1,9 @@
 # ms Version Tree  
-# Format: version|version_name|download_url|checksum
+# Format: version|version_name|download_url|checksum|install_script|uninstall_script
 #         config|key|default_value|description|category|scripts
 
 # Version information
-version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/ms.sh|dev
+# install_script and uninstall_script are optional (use empty string if not needed)
+version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/ms.sh|dev||
 
 # Configuration keys (none for ms core - configurations are managed by individual commands)
