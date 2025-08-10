@@ -335,7 +335,7 @@ mkdir -p "$MAGIC_DIR/scripts"
 
 # Download core files (version-independent)
 printf "  Downloading config.sh... "
-if download_file "$RAW_URL/config.sh" "$MAGIC_DIR/config.sh"; then
+if download_file "$RAW_URL/config.sh" "$MAGIC_DIR/core/config.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -345,7 +345,7 @@ else
 fi
 
 printf "  Downloading registry.sh... "
-if download_file "$RAW_URL/registry.sh" "$MAGIC_DIR/registry.sh"; then
+if download_file "$RAW_URL/registry.sh" "$MAGIC_DIR/core/registry.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"

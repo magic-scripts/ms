@@ -8,8 +8,10 @@ MAGIC_SCRIPT_DIR="${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}"
 
 # Try to load libraries
 for lib in config.sh registry.sh; do
-    if [ -f "$MAGIC_SCRIPT_DIR/$lib" ]; then
-        . "$MAGIC_SCRIPT_DIR/$lib"
+    if [ -f "$MAGIC_SCRIPT_DIR/core/$lib" ]; then
+        . "$MAGIC_SCRIPT_DIR/core/$lib"
+    elif [ -f "$SCRIPT_DIR/../core/$lib" ]; then
+        . "$SCRIPT_DIR/../core/$lib"
     elif [ -f "$SCRIPT_DIR/../$lib" ]; then
         . "$SCRIPT_DIR/../$lib"
     fi

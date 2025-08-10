@@ -10,6 +10,9 @@ $HOME/.local/
 │   ├── ms                           # Main Magic Scripts CLI
 │   └── [command-wrappers]           # Individual command wrappers
 └── share/magicscripts/              # Data and configuration directory
+    ├── core/                        # Core system files
+    │   ├── config.sh                # Configuration system
+    │   └── registry.sh              # Registry system
     ├── scripts/                     # Actual script files
     │   └── [command].sh             # Downloaded script files
     ├── installed/                   # Installation metadata
