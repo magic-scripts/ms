@@ -1,0 +1,117 @@
+.TH MS 1 "August 2025" "ms 0.0.1" "User Commands"
+.SH NAME
+ms \- Magic Scripts command line interface
+.SH SYNOPSIS
+.B ms
+[\fIOPTION\fR]...
+[\fICOMMAND\fR]
+[\fIARG\fR]...
+.SH DESCRIPTION
+Magic Scripts is a comprehensive collection of developer automation tools for streamlined project setup, configuration management, and development workflows.
+.PP
+The \fBms\fR command provides the main interface for managing Magic Scripts commands, configuration, and registries.
+.SH COMMANDS
+.TP
+.B help
+Show detailed help message
+.TP
+.B version
+Show version information
+.TP
+.B status
+Show installation status of all commands
+.TP
+.B doctor
+Diagnose and repair system issues
+.TP
+.B search \fI[query]\fR
+Search for available commands
+.TP
+.B upgrade
+Update all registries to latest version
+.TP
+.B update
+Update all installed commands to latest versions
+.TP
+.B install \fI<command>\fR...
+Install specific commands
+.TP
+.B install \-r \fI<registry>\fR
+Install all commands from specified registry
+.TP
+.B uninstall \fI<command>\fR...
+Uninstall specific commands
+.TP
+.B config list
+Show current configuration values
+.TP
+.B config list \-r
+Show available configuration keys
+.TP
+.B config set \fI<key>\fR \fI<value>\fR
+Set configuration value
+.TP
+.B config get \fI<key>\fR
+Get configuration value
+.TP
+.B config setup \fI[command]\fR
+Interactive configuration setup
+.TP
+.B reg list
+List all configured registries
+.TP
+.B reg add \fI<name>\fR \fI<url>\fR
+Add a new registry
+.TP
+.B reg remove \fI<name>\fR
+Remove a registry
+.SH EXAMPLES
+.TP
+.B ms install gigen licgen
+Install specific commands
+.TP
+.B ms install \-r default
+Install all commands from default registry
+.TP
+.B ms config set AUTHOR_NAME "Your Name"
+Set author name configuration
+.TP
+.B ms config setup
+Interactive configuration setup
+.TP
+.B ms search docker
+Search for Docker-related commands
+.SH CONFIGURATION
+Configuration is stored in:
+.IP \(bu 2
+Global: \fI~/.local/share/magicscripts/config\fR
+.IP \(bu 2
+Local project: \fI.msconfig\fR (if exists)
+.PP
+Common configuration keys:
+.IP \(bu 2
+\fBAUTHOR_NAME\fR \- Your name for file headers
+.IP \(bu 2
+\fBAUTHOR_EMAIL\fR \- Your email address
+.IP \(bu 2
+\fBDEFAULT_GIT_BRANCH\fR \- Default git branch name
+.SH FILES
+.TP
+.I ~/.local/bin/ms/
+Command wrappers directory
+.TP
+.I ~/.local/share/magicscripts/
+Data and configuration directory
+.TP
+.I ~/.local/share/magicscripts/core/
+Core system files
+.TP
+.I ~/.local/share/magicscripts/scripts/
+Installed script files
+.TP
+.I ~/.local/share/magicscripts/reg/
+Registry cache and metadata
+.SH AUTHOR
+Magic Scripts development team
+.SH SEE ALSO
+Visit https://github.com/magic-scripts/ms for more information and documentation.

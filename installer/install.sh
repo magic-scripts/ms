@@ -335,7 +335,7 @@ mkdir -p "$MAGIC_DIR/scripts"
 
 # Download core files (version-independent)
 printf "  Downloading config.sh... "
-if download_file "$RAW_URL/config.sh" "$MAGIC_DIR/core/config.sh"; then
+if download_file "$RAW_URL/core/config.sh" "$MAGIC_DIR/core/config.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -345,7 +345,7 @@ else
 fi
 
 printf "  Downloading registry.sh... "
-if download_file "$RAW_URL/registry.sh" "$MAGIC_DIR/core/registry.sh"; then
+if download_file "$RAW_URL/core/registry.sh" "$MAGIC_DIR/core/registry.sh"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${RED}failed${NC}\n"
@@ -356,7 +356,7 @@ fi
 # No need to download registry files during installation
 
 printf "  Downloading ms.sh (v$MS_VERSION)... "
-if download_file "$MS_URL" "$MAGIC_DIR/scripts/ms.sh"; then
+if download_file "$RAW_URL/scripts/ms.sh" "$MAGIC_DIR/scripts/ms.sh"; then
     chmod 755 "$MAGIC_DIR/scripts/ms.sh"
     printf "${GREEN}done${NC}\n"
     
@@ -392,7 +392,7 @@ chmod 755 "$INSTALL_DIR/ms"
 printf "  Installing man page... "
 MAN_DIR="$HOME/.local/share/man/man1"
 mkdir -p "$MAN_DIR"
-if download_file "$RAW_URL/ms.1" "$MAN_DIR/ms.1"; then
+if download_file "$RAW_URL/man/ms.1" "$MAN_DIR/ms.1"; then
     printf "${GREEN}done${NC}\n"
 else
     printf "${YELLOW}failed${NC}\n"

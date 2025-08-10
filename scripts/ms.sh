@@ -1109,7 +1109,7 @@ EOF
             registry_url=$(get_registry_url "default" 2>/dev/null)
         fi
         if [ -z "$registry_url" ] || [ "$registry_url" = "unknown" ]; then
-            registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
+            registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msreg"
         fi
     fi
     

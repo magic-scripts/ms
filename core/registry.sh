@@ -11,7 +11,7 @@ REGLIST_FILE="$REG_DIR/reglist"
 
 # Default registry URL
 DEFAULT_REGISTRY_NAME="default"
-DEFAULT_REGISTRY_URL="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
+DEFAULT_REGISTRY_URL="https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msreg"
 
 # Initialize registry directories and default reglist
 init_registry_dirs() {
