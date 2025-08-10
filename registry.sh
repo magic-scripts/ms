@@ -22,6 +22,15 @@ init_registry_dirs() {
         echo "# Magic Scripts Registry List" > "$REGLIST_FILE"
         echo "# Format: name:url" >> "$REGLIST_FILE"
         echo "$DEFAULT_REGISTRY_NAME:$DEFAULT_REGISTRY_URL" >> "$REGLIST_FILE"
+    else
+        # Migrate from old 'ms' registry name to 'default'
+        if grep -q "^ms:" "$REGLIST_FILE" && ! grep -q "^default:" "$REGLIST_FILE"; then
+            sed -i.bak 's/^ms:/default:/' "$REGLIST_FILE"
+            # Also rename the cached registry file
+            if [ -f "$REG_DIR/ms.msreg" ] && [ ! -f "$REG_DIR/default.msreg" ]; then
+                mv "$REG_DIR/ms.msreg" "$REG_DIR/default.msreg" 2>/dev/null || true
+            fi
+        fi
     fi
 }
 
@@ -608,6 +617,15 @@ get_command_config_keys() {
     
     if [ -n "$msver_url" ]; then
         download_and_parse_msver "$msver_url" "$cmd" | grep "^config|"
+    fi
+}
+
+# Get registry URL by name
+get_registry_url() {
+    local registry_name="$1"
+    
+    if [ -f "$REGLIST_FILE" ]; then
+        grep "^$registry_name:" "$REGLIST_FILE" 2>/dev/null | cut -d':' -f2-
     fi
 }
 

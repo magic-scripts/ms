@@ -549,8 +549,11 @@ install_registry_all() {
     local installed_count=0
     local failed_count=0
     
-    echo "$registry_commands" | while IFS='|' read -r prefix cmd msver_url desc category msver_checksum; do
-        [ "$prefix" != "command" ] && continue  # Only process command entries
+    # Use temporary file to avoid subshell variable issues
+    local temp_file=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}"; return 1; }
+    echo "$registry_commands" > "$temp_file"
+    
+    while IFS='|' read -r cmd msver_url desc category; do
         [ -z "$cmd" ] && continue
         [ "$cmd" = "ms" ] && continue  # Skip ms core command
         
@@ -587,7 +590,9 @@ install_registry_all() {
                 failed_count=$((failed_count + 1))
                 ;;
         esac
-    done
+    done < "$temp_file"
+    
+    rm -f "$temp_file"
     
     echo ""
     echo "Registry installation complete!"
@@ -1071,7 +1076,7 @@ EOF
     chmod 755 "$INSTALL_DIR/$cmd"
     
     # Get registry information for metadata
-    local final_registry_name="${registry_name:-ms}"
+    local final_registry_name="${registry_name:-default}"
     local registry_url="unknown"  
     local registry_checksum="unknown"
     
@@ -1098,7 +1103,12 @@ EOF
     
     # Last fallback to default URL
     if [ "$registry_url" = "unknown" ] || [ -z "$registry_url" ]; then
-        registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
+        if command -v get_registry_url >/dev/null 2>&1; then
+            registry_url=$(get_registry_url "default" 2>/dev/null)
+        fi
+        if [ -z "$registry_url" ] || [ "$registry_url" = "unknown" ]; then
+            registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg"
+        fi
     fi
     
     # Execute install script if provided
@@ -1789,7 +1799,7 @@ handle_reinstall() {
                     local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
                     if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
                         # Try to find which registry contains this command
-                        registry_name="ms"  # Default fallback
+                        registry_name="default"  # Default fallback
                         if command -v get_registry_names >/dev/null 2>&1; then
                             for reg in $(get_registry_names); do
                                 if get_registry_commands "$reg" 2>/dev/null | grep -q "^$base_cmd|"; then
@@ -2042,7 +2052,7 @@ handle_update() {
                 if [ -n "$script_info" ]; then
                     file=$(echo "$script_info" | cut -d'|' -f3)
                     # Force update by passing current registry version
-                    if install_script "$cmd" "$file" "ms" "$registry_version" >/dev/null 2>&1; then
+                    if install_script "$cmd" "$file" "default" "$registry_version" >/dev/null 2>&1; then
                         echo "${GREEN}done${NC} ($installed_version → $registry_version)"
                         updated_count=$((updated_count + 1))
                     else
@@ -2147,7 +2157,7 @@ handle_update() {
         if [ -n "$script_info" ]; then
             file=$(echo "$script_info" | cut -d'|' -f3)
             printf "  Updating ${CYAN}%s${NC}... " "$cmd"
-            if install_script "$cmd" "$file" "ms" "$registry_version"; then
+            if install_script "$cmd" "$file" "default" "$registry_version"; then
                 echo "${GREEN}done${NC}"
                 echo "Successfully updated $cmd ($installed_version → $registry_version)"
             else
@@ -2273,7 +2283,7 @@ handle_doctor() {
                                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
                                     local registry_name=$(get_installation_metadata "$cmd" "registry_name")
                                     if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
-                                        registry_name="ms"
+                                        registry_name="default"
                                     fi
                                     if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" >/dev/null 2>&1; then
                                         echo "    ✅ $cmd: Reinstalled successfully"
@@ -2343,12 +2353,12 @@ handle_doctor() {
     
     # 4. PATH Check
     echo "${YELLOW}PATH Configuration${NC}"
-    if echo "$PATH" | grep -q "$HOME/.local/bin"; then
-        echo "  ✅ ~/.local/bin is in PATH"
+    if echo "$PATH" | grep -q "$HOME/.local/bin/ms"; then
+        echo "  ✅ ~/.local/bin/ms is in PATH"
     else
-        echo "  ⚠️  ~/.local/bin not found in PATH"
+        echo "  ⚠️  ~/.local/bin/ms not found in PATH"
         echo "    Add this to your shell profile:"
-        echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo "    export PATH=\"\$HOME/.local/bin/ms:\$PATH\""
     fi
     echo ""
     
