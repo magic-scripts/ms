@@ -50,8 +50,8 @@ ms_internal_get_config_registry_file() {
     fi
     
     # Fallback to development registry (also 2-tier now)
-    if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" 2>/dev/null | grep -v "^$" | while IFS='|' read -r cmd msver_url desc category; do
+    if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" 2>/dev/null | grep -v "^$" | while IFS='|' read -r cmd msver_url desc category; do
             [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
             
             if command -v download_and_parse_msver >/dev/null 2>&1; then

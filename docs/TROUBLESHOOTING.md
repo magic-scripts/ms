@@ -57,13 +57,13 @@ curl: (22) The requested URL returned error: 404 Not Found
 1. Check internet connection
 2. Try alternative installation method:
 ```bash
-wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 ```
 3. Manual installation:
 ```bash
 git clone https://github.com/magic-scripts/ms.git
 cd ms
-./installer/install.sh
+./setup.sh
 ```
 
 ## Configuration Issues
@@ -349,7 +349,7 @@ unset MS_DEBUG
 # Complete removal and reinstall
 ~/.local/bin/ms/ms uninstall --all
 rm -rf ~/.local/share/magicscripts/
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 ```
 
 ### Check system compatibility

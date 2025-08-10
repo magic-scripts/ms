@@ -39,8 +39,8 @@ remove_from_shell_config() {
 }
 
 echo "========================================="
-echo "      Magic Scripts v0.0.1 Uninstaller "
-echo "========================================="
+echo "     Magic Scripts Complete Uninstaller "
+echo "=========================================="
 echo ""
 
 # Check if Magic Scripts is installed
@@ -138,4 +138,4 @@ fi
 echo "Thank you for using Magic Scripts!"
 echo ""
 echo "If you want to reinstall in the future:"
-echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh${NC}"
+echo "  ${CYAN}curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh${NC}"

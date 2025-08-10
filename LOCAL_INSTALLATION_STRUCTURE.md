@@ -65,14 +65,14 @@ uninstall_script_url=https://example.com/uninstall.sh
 #### Registry List Format
 ```
 # Format: name:url
-default:https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg
+default:https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msreg
 custom:https://example.com/custom.msreg
 ```
 
 #### Registry Data Format
 ```
 # Format: command|msver_url|description|category
-gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/gigen.msver|.gitignore generator|development
+gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/registry/gigen.msver|.gitignore generator|development
 ```
 
 ## Configuration Architecture

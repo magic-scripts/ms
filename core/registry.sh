@@ -288,8 +288,8 @@ get_all_commands() {
     trap "rm -f '$temp_commands'" EXIT
     
     # Check development registry first (for version support)
-    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | grep -v "^config:" | grep -v "^$" | while IFS=':' read -r cmd script desc category; do
+    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^config:" | grep -v "^$" | while IFS=':' read -r cmd script desc category; do
             [ -n "$cmd" ] && echo "$cmd" >> "$temp_commands"
         done
     fi
@@ -324,8 +324,8 @@ get_script_info() {
     local reg_file
     
     # Check development registry first (for version support)
-    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        local result=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | head -1)
+    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
+        local result=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | head -1)
         if [ -n "$result" ]; then
             echo "$result"
             return 0
@@ -383,8 +383,8 @@ get_all_config_keys() {
     trap "rm -f '$temp_configs'" EXIT
     
     # Check development registry first
-    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        grep "^config|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" >> "$temp_configs"
+    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
+        grep "^config|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" >> "$temp_configs"
     fi
     
     # Add configs from cached registries if not already found
@@ -422,8 +422,8 @@ search_commands() {
     > "$temp_results"  # Clear temp file
     
     # Check development registry first (for version support)
-    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
+    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
             [ -z "$cmd" ] && continue
             
             if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
@@ -540,10 +540,10 @@ get_command_info() {
     
     # Check development registry first (if in development environment)
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
-    if [ -f "$script_dir/ms.msreg" ]; then
-        cmd_meta=$(grep "^$cmd|" "$script_dir/ms.msreg" | head -1)
-    elif [ -n "${MAGIC_SCRIPT_DIR:-}" ] && [ -f "${MAGIC_SCRIPT_DIR}/ms.msreg" ]; then
-        cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR}/ms.msreg" | head -1)
+    if [ -f "$script_dir/registry/ms.msreg" ]; then
+        cmd_meta=$(grep "^$cmd|" "$script_dir/registry/ms.msreg" | head -1)
+    elif [ -n "${MAGIC_SCRIPT_DIR:-}" ] && [ -f "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" ]; then
+        cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" | head -1)
     fi
     
     # Fallback to cached registries

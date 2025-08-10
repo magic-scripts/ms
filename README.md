@@ -6,7 +6,7 @@ A comprehensive collection of developer automation tools for streamlined project
 
 ### Installation
 ```bash
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 ```
 
 ### First Steps
@@ -19,6 +19,13 @@ ms config set AUTHOR_NAME "Your Name"        # Configure settings
 ### Uninstallation
 ```bash
 curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh | sh
+```
+
+### Self-Update
+```bash
+ms self-update                                # Update ms core system
+# or
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh | sh
 ```
 
 ## 📖 Documentation

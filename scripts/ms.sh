@@ -1896,7 +1896,7 @@ handle_ms_force_reinstall() {
     echo "─────────────────────────────────────────"
     
     # Step 2: Run install script
-    local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh"
+    local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh"
     local temp_install=$(mktemp) || { 
         echo "${RED}Error: Cannot create temp file${NC}" >&2
         return 1

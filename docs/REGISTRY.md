@@ -9,8 +9,8 @@ Contains command listings pointing to their version files:
 
 ```
 # Format: name|msver_url|description|category
-gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/gigen.msver|.gitignore generator|development
-licgen|https://raw.githubusercontent.com/magic-scripts/licgen/main/licgen.msver|License generator|development
+gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/registry/gigen.msver|.gitignore generator|development
+licgen|https://raw.githubusercontent.com/magic-scripts/licgen/main/registry/licgen.msver|License generator|development
 ```
 
 ### Tier 2: Version Files (`.msver`) 
@@ -136,7 +136,7 @@ ms reg add mytools https://example.com/mytools.msreg
 ## Default Registry
 
 The default registry is hosted at:
-- **URL**: `https://raw.githubusercontent.com/magic-scripts/ms/main/ms.msreg`  
+- **URL**: `https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msreg`  
 - **Name**: `default`
 - **Contents**: Official Magic Scripts tools
 

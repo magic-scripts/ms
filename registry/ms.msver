@@ -4,6 +4,7 @@
 
 # Version information
 # install_script and uninstall_script are optional (use empty string if not needed)
-version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/ms.sh|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/install.sh|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/uninstall.sh
+version|0.0.1|https://raw.githubusercontent.com/magic-scripts/ms/main/scripts/ms.sh|sha256abc|https://raw.githubusercontent.com/magic-scripts/ms/main/installer/install.sh|https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh
+version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/ms.sh|dev||https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/uninstall.sh
 
 # Configuration keys (none for ms core - configurations are managed by individual commands)
