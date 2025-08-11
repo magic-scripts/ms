@@ -6,6 +6,20 @@ export MS_SCRIPT_ID="ms"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MAGIC_SCRIPT_DIR="${MAGIC_SCRIPT_DIR:-$HOME/.local/share/magicscripts}"
 
+# Cleanup function for safe exit
+cleanup_ms() {
+    # Clear reinstall mode flag if set
+    if [ -n "${MS_REINSTALL_MODE:-}" ]; then
+        unset MS_REINSTALL_MODE 2>/dev/null || true
+    fi
+    
+    # Clean up any temp files created during execution
+    # Add temp file cleanup here if needed in future
+}
+
+# Set trap for cleanup on exit/interrupt
+trap cleanup_ms EXIT INT TERM
+
 # Try to load libraries
 for lib in config.sh registry.sh; do
     if [ -f "$MAGIC_SCRIPT_DIR/core/$lib" ]; then
@@ -1375,21 +1389,29 @@ handle_uninstall() {
                 fi
             fi
             
-            rm "$INSTALL_DIR/$cmd"
-            echo "  ${GREEN}Removed${NC}: $cmd$registry_info"
-            removed_count=$((removed_count + 1))
-            
-            # Remove metadata
-            remove_installation_metadata "$cmd"
-            
-            # Also remove associated script files if they exist
-            if [ -n "$script_info" ]; then
-                local file=$(echo "$script_info" | cut -d'|' -f3)
-                local script_path="$MAGIC_SCRIPT_DIR/$file"
-                if [ -f "$script_path" ]; then
-                    rm "$script_path" 2>/dev/null || true
+            # Handle non-ms commands cleanup
+            if [ "$cmd" != "ms" ]; then
+                # Remove individual file
+                if [ -f "$INSTALL_DIR/$cmd" ]; then
+                    rm "$INSTALL_DIR/$cmd"
+                fi
+                
+                echo "  ${GREEN}Removed${NC}: $cmd$registry_info"
+                
+                # Remove metadata
+                remove_installation_metadata "$cmd"
+                
+                # Also remove associated script files if they exist
+                if [ -n "$script_info" ]; then
+                    local file=$(echo "$script_info" | cut -d'|' -f3)
+                    local script_path="$MAGIC_SCRIPT_DIR/$file"
+                    if [ -f "$script_path" ]; then
+                        rm "$script_path" 2>/dev/null || true
+                    fi
                 fi
             fi
+            
+            removed_count=$((removed_count + 1))
         else
             echo "  ${YELLOW}Not found${NC}: $cmd"
         fi
@@ -1761,6 +1783,11 @@ handle_reinstall() {
         
         printf "  Reinstalling ${CYAN}%s${NC}... " "$cmd"
         
+        # Set reinstall mode for ms to prevent early exit
+        if [ "$base_cmd" = "ms" ]; then
+            export MS_REINSTALL_MODE=true
+        fi
+        
         # First, execute uninstall script if exists (before removing files)
         local INSTALL_DIR="$HOME/.local/bin/ms"
         if [ -f "$INSTALL_DIR/$base_cmd" ]; then
@@ -1941,6 +1968,9 @@ handle_ms_force_reinstall() {
     
     echo "${CYAN}Updating Magic Scripts core script...${NC}"
     echo "─────────────────────────────────────────"
+    
+    # Set reinstall mode to prevent early exit during uninstall
+    export MS_REINSTALL_MODE=true
     
     # Use install_script function to reinstall ms with force flag
     local install_result

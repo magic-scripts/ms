@@ -4,6 +4,16 @@ set -e
 
 VERSION="0.0.1"
 
+# Cleanup function for safe exit
+cleanup_uninstall() {
+    # Clean up any temporary files created during uninstall
+    # Currently no temp files are created, but this is for future-proofing
+    true
+}
+
+# Set trap for cleanup on exit/interrupt
+trap cleanup_uninstall EXIT INT TERM
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -53,27 +63,62 @@ if [ ! -f "$INSTALL_DIR/ms" ] && [ ! -d "$INSTALL_DIR" ] && [ ! -d "$MAGIC_DIR" 
     exit 0
 fi
 
+# List installed Magic Scripts commands
+INSTALLED_COMMANDS=""
+INSTALLED_COUNT=0
+if [ -d "$INSTALL_DIR" ]; then
+    for cmd_file in "$INSTALL_DIR"/*; do
+        # Check if glob actually expanded (not literal *)
+        [ -e "$cmd_file" ] || continue
+        if [ -x "$cmd_file" ]; then
+            cmd=$(basename "$cmd_file")
+            INSTALLED_COMMANDS="$INSTALLED_COMMANDS $cmd"
+            INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
+        fi
+    done
+fi
+
 echo "${RED}WARNING: This will completely remove Magic Scripts!${NC}"
 echo ""
 echo "This will remove:"
+echo "  ${CYAN}Core System:${NC}"
 if [ -d "$INSTALL_DIR" ]; then
-    echo "  - Installation directory: $INSTALL_DIR"
+    echo "    - Installation directory: $INSTALL_DIR"
 fi
 if [ -d "$MAGIC_DIR" ]; then
-    echo "  - Magic Scripts data (including config): $MAGIC_DIR"
+    echo "    - Magic Scripts data directory: $MAGIC_DIR"
+    echo "      (configuration, registries, core libraries)"
 fi
-if [ -f "$HOME/.local/share/man/man1/ms.1" ]; then
-    echo "  - Man page: ~/.local/share/man/man1/ms.1"
-fi
-echo "  - PATH and MANPATH modifications from shell configuration files"
+echo "    - PATH and MANPATH modifications from shell configs"
 echo ""
-printf "Are you sure? Type 'yes' to continue: "
+
+if [ "$INSTALLED_COUNT" -gt 1 ]; then
+    echo "  ${YELLOW}Other installed commands ($((INSTALLED_COUNT - 1))):${NC}"
+    for cmd in $INSTALLED_COMMANDS; do
+        if [ "$cmd" != "ms" ]; then
+            echo "    - $cmd"
+        fi
+    done
+    echo ""
+    echo "  ${YELLOW}Note: You can keep these by answering 'no' below${NC}"
+    echo ""
+fi
+
+printf "${RED}Remove Magic Scripts core only?${NC} [yes/all/no]: "
 read reply < /dev/tty
 
+REMOVE_ALL_COMMANDS=false
+
 case "$reply" in
-    yes)
+    yes|YES)
         echo ""
-        echo "${YELLOW}Removing Magic Scripts...${NC}"
+        echo "${YELLOW}Removing Magic Scripts core...${NC}"
+        REMOVE_ALL_COMMANDS=false
+        ;;
+    all|ALL)
+        echo ""
+        echo "${YELLOW}Removing Magic Scripts and all installed commands...${NC}"
+        REMOVE_ALL_COMMANDS=true
         ;;
     *)
         echo "Uninstall cancelled."
@@ -81,29 +126,127 @@ case "$reply" in
         ;;
 esac
 
-# Remove installation directory
-if [ -d "$INSTALL_DIR" ]; then
-    rm -rf "$INSTALL_DIR"
-    echo "  ${GREEN}Removed${NC}: Installation directory ($INSTALL_DIR)"
-else
-    echo "  ${YELLOW}Not found${NC}: Installation directory"
+# Remove ms executable first
+if [ -f "$INSTALL_DIR/ms" ]; then
+    rm -f "$INSTALL_DIR/ms"
+    echo "  ${GREEN}Removed${NC}: ms command"
 fi
 
-# Remove Magic Scripts data directory
-if [ -d "$MAGIC_DIR" ]; then
-    rm -rf "$MAGIC_DIR"
-    echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+# Handle other commands based on user choice
+if [ "$REMOVE_ALL_COMMANDS" = true ]; then
+    # Remove entire installation directory
+    if [ -d "$INSTALL_DIR" ]; then
+        rm -rf "$INSTALL_DIR"
+        echo "  ${GREEN}Removed${NC}: Installation directory with all commands"
+    fi
 else
-    echo "  ${YELLOW}Not found${NC}: Magic Scripts data directory"
+    # Keep other commands but remove ms-related items
+    if [ "$INSTALLED_COUNT" -gt 1 ]; then
+        echo "  ${CYAN}Keeping other installed commands${NC}"
+        # Remove ms directory if empty or only has other commands
+        if [ -d "$INSTALL_DIR" ]; then
+            # Check if directory is now empty
+            remaining=$(ls -1 "$INSTALL_DIR" 2>/dev/null | wc -l)
+            if [ "$remaining" -eq 0 ]; then
+                rmdir "$INSTALL_DIR" 2>/dev/null || true
+                echo "  ${GREEN}Removed${NC}: Empty installation directory"
+            fi
+        fi
+    else
+        # No other commands, remove directory
+        if [ -d "$INSTALL_DIR" ]; then
+            rm -rf "$INSTALL_DIR"
+            echo "  ${GREEN}Removed${NC}: Installation directory (was empty)"
+        fi
+    fi
 fi
 
-# Remove man page
-MAN_FILE="$HOME/.local/share/man/man1/ms.1"
-if [ -f "$MAN_FILE" ]; then
-    rm -f "$MAN_FILE"
-    echo "  ${GREEN}Removed${NC}: Man page ($MAN_FILE)"
+# Remove Magic Scripts data directory (selectively based on user choice)
+if [ "$REMOVE_ALL_COMMANDS" = true ]; then
+    # Remove entire data directory
+    if [ -d "$MAGIC_DIR" ]; then
+        rm -rf "$MAGIC_DIR"
+        echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+    else
+        echo "  ${YELLOW}Not found${NC}: Magic Scripts data directory"
+    fi
 else
-    echo "  ${YELLOW}Not found${NC}: Man page"
+    # Remove only ms-related core files, keep other command data
+    if [ -d "$MAGIC_DIR" ]; then
+        # Remove core directory (contains config.sh, registry.sh)
+        if [ -d "$MAGIC_DIR/core" ]; then
+            rm -rf "$MAGIC_DIR/core"
+            echo "  ${GREEN}Removed${NC}: Core libraries"
+        fi
+        
+        # Remove ms script
+        if [ -f "$MAGIC_DIR/scripts/ms.sh" ]; then
+            rm -f "$MAGIC_DIR/scripts/ms.sh"
+            echo "  ${GREEN}Removed${NC}: ms.sh script"
+        fi
+        
+        # Remove ms metadata
+        if [ -f "$MAGIC_DIR/installed/ms.msmeta" ]; then
+            rm -f "$MAGIC_DIR/installed/ms.msmeta"
+            echo "  ${GREEN}Removed${NC}: ms metadata"
+        fi
+        
+        # Remove registry data
+        if [ -d "$MAGIC_DIR/reg" ]; then
+            rm -rf "$MAGIC_DIR/reg"
+            echo "  ${GREEN}Removed${NC}: Registry cache"
+        fi
+        
+        # Remove config file
+        if [ -f "$MAGIC_DIR/config" ]; then
+            rm -f "$MAGIC_DIR/config"
+            echo "  ${GREEN}Removed${NC}: Configuration file"
+        fi
+        
+        # Check if scripts directory is empty and remove if so
+        if [ -d "$MAGIC_DIR/scripts" ]; then
+            if [ -z "$(ls -A "$MAGIC_DIR/scripts" 2>/dev/null)" ]; then
+                rmdir "$MAGIC_DIR/scripts"
+            fi
+        fi
+        
+        # Check if installed directory is empty and remove if so
+        if [ -d "$MAGIC_DIR/installed" ]; then
+            if [ -z "$(ls -A "$MAGIC_DIR/installed" 2>/dev/null)" ]; then
+                rmdir "$MAGIC_DIR/installed"
+            fi
+        fi
+        
+        # Check if entire MAGIC_DIR is empty and remove if so
+        if [ -z "$(ls -A "$MAGIC_DIR" 2>/dev/null)" ]; then
+            rmdir "$MAGIC_DIR"
+            echo "  ${GREEN}Removed${NC}: Empty data directory"
+        else
+            echo "  ${CYAN}Kept${NC}: Data for other installed commands"
+        fi
+    fi
+fi
+
+# Remove man pages
+MAN_DIR="$HOME/.local/share/man/man1"
+if [ "$REMOVE_ALL_COMMANDS" = true ]; then
+    # Remove all Magic Scripts man pages
+    removed_man_count=0
+    for man_file in "$MAN_DIR"/ms*.1; do
+        if [ -f "$man_file" ]; then
+            rm -f "$man_file"
+            removed_man_count=$((removed_man_count + 1))
+        fi
+    done
+    if [ $removed_man_count -gt 0 ]; then
+        echo "  ${GREEN}Removed${NC}: $removed_man_count man pages"
+    fi
+else
+    # Remove only ms man page
+    if [ -f "$MAN_DIR/ms.1" ]; then
+        rm -f "$MAN_DIR/ms.1"
+        echo "  ${GREEN}Removed${NC}: ms man page"
+    fi
 fi
 
 # Configuration is now part of MAGIC_DIR, removed with data directory above
