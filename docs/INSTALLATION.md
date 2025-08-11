@@ -113,7 +113,7 @@ ms self-update
 
 Or manually:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh | sh
+ms reinstall ms
 ```
 
 ### Update Individual Commands
@@ -126,7 +126,7 @@ ms update --all
 
 ### Complete Removal
 ```bash
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh | sh
+ms uninstall ms
 ```
 
 This will:

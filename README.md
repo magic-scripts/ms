@@ -18,14 +18,14 @@ ms config set AUTHOR_NAME "Your Name"        # Configure settings
 
 ### Uninstallation
 ```bash
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh | sh
+ms uninstall ms
 ```
 
 ### Self-Update
 ```bash
 ms self-update                                # Update ms core system
 # or
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh | sh
+ms reinstall ms                               # Reinstall ms core system
 ```
 
 ## 📖 Documentation

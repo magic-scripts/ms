@@ -567,11 +567,14 @@ install_registry_all() {
         
         local install_result
         if [ -n "$version_info" ]; then
-            # Extract script URL from version info: version|version_name|script_url|checksum
+            # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
             local script_url=$(echo "$version_info" | cut -d'|' -f3)
             local version_name=$(echo "$version_info" | cut -d'|' -f2)
+            local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
+            local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
+            local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
             
-            install_script "$cmd" "$script_url" "$registry_name" "$version_name"
+            install_script "$cmd" "$script_url" "$registry_name" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url"
             install_result=$?
         else
             echo "${RED}no version available${NC}"
@@ -717,12 +720,13 @@ install_commands_with_detection() {
             
             local install_result
             if [ -n "$version_info" ]; then
-                # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script
+                # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
                 local script_url=$(echo "$version_info" | cut -d'|' -f3)
                 local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
                 local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
+                local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
                 
-                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script"
+                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script"
                 install_result=$?
             else
                 echo "${RED}no version available${NC}"
@@ -785,10 +789,13 @@ install_commands_with_detection() {
                 
                 local install_result
                 if [ -n "$version_info" ]; then
-                    # Extract script URL from version info: version|version_name|script_url|checksum
+                    # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                    local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
+                    local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
+                    local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                     
-                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version"
+                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url"
                     install_result=$?
                 else
                     echo "${RED}no version available${NC}"
@@ -904,12 +911,15 @@ handle_install() {
                     if [ -n "$version_info" ]; then
                         printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"
                         
-                        # Extract script URL from version info: version|version_name|script_url|checksum
+                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
                         local script_url=$(echo "$version_info" | cut -d'|' -f3)
                         local version_name=$(echo "$version_info" | cut -d'|' -f2)
+                        local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
+                        local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
+                        local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                         
                         local install_result
-                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name"
+                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url"
                         install_result=$?
                     else
                         printf "  Installing ${CYAN}%s${NC}... " "$cmd"
@@ -973,6 +983,7 @@ install_script() {
     local force_flag="$5"     # Optional: "force" to force reinstall
     local install_hook_script="$6"  # Optional: install script URL
     local uninstall_hook_script="$7"  # Optional: uninstall script URL
+    local update_hook_script="$8"  # Optional: update script URL
     
     # Handle legacy calls without version parameter
     if [ "$4" = "force" ]; then
@@ -996,13 +1007,19 @@ install_script() {
     fi
     local installed_version=$(get_installed_version "$cmd")
     
-    # Check if already installed (unless force flag specified)
+    # Detect if this is an update scenario  
+    local is_update=false
+    local old_version=""
     if [ "$force_flag" != "force" ] && [ -f "$INSTALL_DIR/$cmd" ] && [ "$installed_version" != "unknown" ]; then
         # If same version, skip
         if [ "$installed_version" = "$registry_version" ]; then
             return 2  # Already installed with correct version (skip code)
         fi
-        # If different version, need to reinstall - remove old version first
+        # If different version, this is an update
+        is_update=true
+        old_version="$installed_version"
+        
+        # Remove old version files
         rm -f "$INSTALL_DIR/$cmd"
         remove_installation_metadata "$cmd"
         # Remove old script file if exists (exact match only)
@@ -1180,6 +1197,44 @@ EOF
             ;;
     esac
     
+    # Execute update script if this was an update (version change) and update_script is provided
+    if [ "$is_update" = true ] && [ -n "$update_hook_script" ] && [ "$update_hook_script" != "" ]; then
+        echo "  ${CYAN}Running update script for $cmd ($old_version → $target_version)...${NC}"
+        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+        
+        # Download update script to temp file and execute
+        local temp_update_script=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+        local update_success=false
+        
+        # Download the update script
+        if command -v curl >/dev/null 2>&1; then
+            if curl -fsSL "$update_hook_script" -o "$temp_update_script"; then
+                if sh "$temp_update_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                    update_success=true
+                fi
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if wget -q "$update_hook_script" -O "$temp_update_script"; then
+                if sh "$temp_update_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
+                    update_success=true
+                fi
+            fi
+        else
+            echo "${RED}Error: curl or wget required for update script${NC}" >&2
+        fi
+        
+        # Clean up temp file
+        rm -f "$temp_update_script"
+        
+        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
+        if [ "$update_success" = true ]; then
+            echo "  ${GREEN}Update script completed successfully${NC}"
+        else
+            echo "${YELLOW}Warning: Update script failed for $cmd${NC}" >&2
+            echo "  ${YELLOW}Installation completed but update tasks may not have been performed${NC}" >&2
+        fi
+    fi
+    
     return 0
 }
 
@@ -1213,38 +1268,6 @@ handle_uninstall() {
     
     local removed_count=0
     for cmd in "$@"; do
-        if [ "$cmd" = "ms" ]; then
-            echo "  ${YELLOW}Uninstalling Magic Scripts core...${NC}"
-            
-            # Use uninstall.sh for ms uninstall
-            local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh"
-            local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-            
-            printf "    Downloading uninstall script... "
-            if command -v curl >/dev/null 2>&1; then
-                if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall"; then
-                    printf "${GREEN}done${NC}\n"
-                else
-                    printf "${RED}failed${NC}\n"
-                    continue
-                fi
-            elif command -v wget >/dev/null 2>&1; then
-                if wget -q "$uninstall_script_url" -O "$temp_uninstall"; then
-                    printf "${GREEN}done${NC}\n"
-                else
-                    printf "${RED}failed${NC}\n"
-                    continue
-                fi
-            else
-                echo "${RED}Error: curl or wget required${NC}"
-                continue
-            fi
-            
-            chmod +x "$temp_uninstall"
-            echo "    Running uninstaller..."
-            exec sh "$temp_uninstall"
-            return
-        fi
         
         if [ "$cmd" = "--all" ]; then
             echo "  ${YELLOW}Removing entire Magic Scripts installation...${NC}"
@@ -1264,6 +1287,24 @@ handle_uninstall() {
         fi
         
         if [ -f "$INSTALL_DIR/$cmd" ]; then
+            # Special confirmation for ms core uninstallation
+            if [ "$cmd" = "ms" ]; then
+                echo "  ${YELLOW}Uninstalling Magic Scripts core...${NC}"
+                echo "  ${RED}WARNING: This will completely remove Magic Scripts and all data!${NC}"
+                echo "  ${YELLOW}This action cannot be undone.${NC}"
+                echo ""
+                printf "  Are you sure you want to continue? [y/N]: "
+                read -r confirmation
+                case "$confirmation" in
+                    [Yy]|[Yy][Ee][Ss]) ;;
+                    *) 
+                        echo "  ${CYAN}Uninstallation cancelled.${NC}"
+                        return 1
+                        ;;
+                esac
+                echo ""
+            fi
+            
             # Check if this command came from registry
             local registry_info=""
             if command -v ms_internal_get_script_info >/dev/null 2>&1; then
@@ -1309,8 +1350,18 @@ handle_uninstall() {
                 echo "  ${YELLOW}═══════════════════════════════════════${NC}"
                 if [ "$uninstall_success" = true ]; then
                     echo "  ${GREEN}Uninstall script completed successfully${NC}"
+                    # If we successfully uninstalled ms core, exit completely (unless this is part of reinstall)
+                    if [ "$cmd" = "ms" ] && [ "${MS_REINSTALL_MODE:-}" != "true" ]; then
+                        echo "  ${GREEN}Magic Scripts has been completely removed.${NC}"
+                        exit 0
+                    fi
                 else
                     echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
+                    # If ms uninstall script failed, we should abort
+                    if [ "$cmd" = "ms" ]; then
+                        echo "  ${RED}Error: Magic Scripts uninstallation failed. Aborting.${NC}"
+                        return 1
+                    fi
                 fi
             fi
             
@@ -1796,6 +1847,7 @@ handle_reinstall() {
                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
                     local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
                     local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
+                    local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
                     
                     # Get the registry name from metadata or find which registry has this command
                     local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
@@ -1812,7 +1864,7 @@ handle_reinstall() {
                         fi
                     fi
                     
-                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force" "$install_hook_script" "$uninstall_hook_script"; then
+                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script"; then
                         echo "${GREEN}done${NC}"
                         reinstall_count=$((reinstall_count + 1))
                     else
@@ -1842,108 +1894,66 @@ handle_reinstall() {
 handle_ms_force_reinstall() {
     echo ""
     echo "${BLUE}═══════════════════════════════════════════${NC}"
-    echo "${BLUE}    Magic Scripts Complete Reinstallation${NC}"
+    echo "${BLUE}    Magic Scripts Script Update${NC}"
     echo "${BLUE}═══════════════════════════════════════════${NC}"
     echo ""
-    echo "${YELLOW}This will completely remove and reinstall Magic Scripts.${NC}"
-    echo "${YELLOW}You will be asked to confirm the uninstallation.${NC}"
+    echo "${YELLOW}This will update the Magic Scripts core script.${NC}"
     echo ""
     
-    # Step 1: Run uninstall script
-    echo "${CYAN}Step 1: Uninstalling current Magic Scripts...${NC}"
-    echo "─────────────────────────────────────────"
-    local uninstall_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/uninstall.sh"
-    local temp_uninstall=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    # Get ms version info from registry
+    local full_cmd_info
+    if command -v get_command_info >/dev/null 2>&1; then
+        full_cmd_info=$(get_command_info "ms" 2>/dev/null)
+    fi
     
-    printf "  Downloading uninstall script... "
-    if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall"; then
-            printf "${GREEN}done${NC}\n"
-        else
-            printf "${RED}failed${NC}\n"
-            rm -f "$temp_uninstall"
-            return 1
-        fi
-    elif command -v wget >/dev/null 2>&1; then
-        if wget -q "$uninstall_script_url" -O "$temp_uninstall"; then
-            printf "${GREEN}done${NC}\n"
-        else
-            printf "${RED}failed${NC}\n"
-            rm -f "$temp_uninstall"
-            return 1
-        fi
-    else
-        echo "${RED}Error: curl or wget required${NC}"
+    if [ -z "$full_cmd_info" ]; then
+        echo "${RED}✗ Cannot retrieve ms version information${NC}"
         return 1
     fi
     
-    chmod +x "$temp_uninstall"
-    echo ""
-    
-    # Run uninstall script - user must confirm
-    sh "$temp_uninstall"
-    local uninstall_result=$?
-    rm -f "$temp_uninstall"
-    
-    if [ $uninstall_result -ne 0 ]; then
-        echo ""
-        echo "${RED}✗ Reinstallation cancelled or failed at uninstall step${NC}"
+    local ms_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+    if [ -z "$ms_info" ]; then
+        echo "${RED}✗ No version information found for ms${NC}"
         return 1
     fi
     
-    echo ""
-    echo "${CYAN}Step 2: Installing fresh Magic Scripts...${NC}"
+    local script_url install_script_url uninstall_script_url update_script_url version_name
+    script_url=$(echo "$ms_info" | cut -d'|' -f3)
+    version_name=$(echo "$ms_info" | cut -d'|' -f2)
+    install_script_url=$(echo "$ms_info" | cut -d'|' -f5)
+    uninstall_script_url=$(echo "$ms_info" | cut -d'|' -f6)
+    update_script_url=$(echo "$ms_info" | cut -d'|' -f7)
+    
+    if [ -z "$script_url" ]; then
+        echo "${RED}✗ Invalid ms version information${NC}"
+        return 1
+    fi
+    
+    echo "${CYAN}Updating Magic Scripts core script...${NC}"
     echo "─────────────────────────────────────────"
     
-    # Step 2: Run install script
-    local install_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh"
-    local temp_install=$(mktemp) || { 
-        echo "${RED}Error: Cannot create temp file${NC}" >&2
-        return 1
-    }
-    
-    printf "  Downloading install script... "
-    if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$install_script_url" -o "$temp_install"; then
-            printf "${GREEN}done${NC}\n"
-        else
-            printf "${RED}failed${NC}\n"
-            echo "${RED}✗ Failed to download install script${NC}"
-            rm -f "$temp_install"
-            return 1
-        fi
-    elif command -v wget >/dev/null 2>&1; then
-        if wget -q "$install_script_url" -O "$temp_install"; then
-            printf "${GREEN}done${NC}\n"
-        else
-            printf "${RED}failed${NC}\n"
-            echo "${RED}✗ Failed to download install script${NC}"
-            rm -f "$temp_install"
-            return 1
-        fi
+    # Use install_script function to reinstall ms with force flag
+    local install_result
+    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url"; then
+        install_result=0
     else
-        echo "${RED}Error: curl or wget required${NC}"
-        return 1
+        install_result=1
     fi
-    
-    chmod +x "$temp_install"
-    echo ""
-    
-    # Run install script
-    sh "$temp_install"
-    local install_result=$?
-    rm -f "$temp_install"
     
     if [ $install_result -ne 0 ]; then
         echo ""
-        echo "${RED}✗ Installation failed${NC}"
+        echo "${RED}✗ Script update failed${NC}"
         return 1
     fi
     
     echo ""
     echo "${GREEN}═══════════════════════════════════════════${NC}"
-    echo "${GREEN}✅ Magic Scripts reinstallation completed!${NC}"
+    echo "${GREEN}✅ Magic Scripts core script updated!${NC}"
     echo "${GREEN}═══════════════════════════════════════════${NC}"
+    echo ""
+    echo "${YELLOW}Note: You may need to restart your terminal or run:${NC}"
+    echo "  ${CYAN}exec \$SHELL${NC}"
+    echo ""
     
     return 0
 }
@@ -2283,11 +2293,14 @@ handle_doctor() {
                                 local version_info=$(echo "$full_cmd_info" | grep "^version|$installed_version|" | head -1)
                                 if [ -n "$version_info" ]; then
                                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
+                                    local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
+                                    local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
+                                    local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                                     local registry_name=$(get_installation_metadata "$cmd" "registry_name")
                                     if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
                                         registry_name="default"
                                     fi
-                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" >/dev/null 2>&1; then
+                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" >/dev/null 2>&1; then
                                         echo "    ✅ $cmd: Reinstalled successfully"
                                         fixed_issues=$((fixed_issues + 1))
                                     else

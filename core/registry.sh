@@ -499,13 +499,14 @@ download_and_parse_msver() {
                 local checksum="$desc_or_checksum"
                 local install_script="$extra1"
                 local uninstall_script="$extra2"
+                local update_script="$extra3"
                 
                 # Filter by version if specified
                 if [ -n "$target_version" ] && [ "$version" != "$target_version" ]; then
                     continue
                 fi
                 
-                echo "version|$version|$url|$checksum|$install_script|$uninstall_script"
+                echo "version|$version|$url|$checksum|$install_script|$uninstall_script|$update_script"
                 ;;
             config)
                 local config_key="$key"
