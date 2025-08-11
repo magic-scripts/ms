@@ -280,7 +280,7 @@ while [ $# -gt 0 ]; do
 done
 
 echo "========================================="
-echo "        Magic Scripts Setup ver.0.0.1      "
+echo "        Magic Scripts Setup v0.0.1      "
 echo "       Developer Automation Tools       "
 echo "========================================="
 echo ""
@@ -357,7 +357,11 @@ echo "Installing Magic Scripts core system..."
     # Registry system will be initialized automatically by ms.sh
     # No need to download registry files during installation
     
-    printf "  Downloading ms.sh (ver.$MS_VERSION)... "
+    if [ "$MS_VERSION" = "dev" ]; then
+        printf "  Downloading ms.sh ($MS_VERSION)... "
+    else
+        printf "  Downloading ms.sh (v$MS_VERSION)... "
+    fi
     if download_file "$MS_URL" "$MAGIC_DIR/scripts/ms.sh"; then
         chmod 755 "$MAGIC_DIR/scripts/ms.sh"
         printf "${GREEN}done${NC}\n"
@@ -459,7 +463,11 @@ fi
 
 echo ""
 echo "========================================="
-echo "${GREEN}✅ Magic Scripts ver.$MS_VERSION installed!${NC}"
+if [ "$MS_VERSION" = "dev" ]; then
+    echo "${GREEN}✅ Magic Scripts $MS_VERSION installed!${NC}"
+else
+    echo "${GREEN}✅ Magic Scripts v$MS_VERSION installed!${NC}"
+fi
 echo "========================================="
 echo ""
 echo "Installed core command:"

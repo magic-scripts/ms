@@ -125,7 +125,7 @@ fi
 
 echo ""
 echo "========================================="
-echo "${GREEN}✅ Magic Scripts ver.$VERSION uninstalled!${NC}"
+echo "${GREEN}✅ Magic Scripts v$VERSION uninstalled!${NC}"
 echo "========================================="
 echo ""
 
