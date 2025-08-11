@@ -5,7 +5,14 @@
 ### 1. Quick Installation (Recommended)
 
 ```bash
+# Latest stable version
 curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+
+# Specific version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v 0.0.1
+
+# Development version (latest features)
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v dev
 ```
 
 This will:
@@ -124,7 +131,7 @@ ms update --all
 
 ## Uninstallation
 
-### Complete Removal
+### Normal Uninstallation
 ```bash
 ms uninstall ms
 ```
@@ -134,6 +141,27 @@ This will:
 - Delete all configuration and data
 - Clean up PATH modifications from shell configs
 - Remove man pages
+
+### Emergency Cleanup
+
+If Magic Scripts is corrupted or the `ms` command is not working:
+
+```bash
+# Download and run cleanup script
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh | sh
+
+# Or download first to review
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh > cleanup.sh
+chmod +x cleanup.sh
+./cleanup.sh
+```
+
+The cleanup script will:
+- Remove all Magic Scripts executables
+- Delete all data and configuration files  
+- Remove man pages
+- Clean PATH modifications from shell configs
+- Provide verification of complete removal
 
 ### Selective Removal
 ```bash

@@ -1,384 +1,301 @@
 # Troubleshooting Guide
 
-Common issues and their solutions for Magic Scripts.
+This guide helps you resolve common issues with Magic Scripts.
 
-## Installation Issues
+## Common Issues
 
-### Command not found after installation
+### 1. `ms` Command Not Found
 
 **Symptoms:**
 ```bash
-$ ms
+$ ms --version
 bash: ms: command not found
 ```
 
 **Solutions:**
-1. Add Magic Scripts to your PATH:
+
+#### Check Installation
 ```bash
-echo 'export PATH="$HOME/.local/bin/ms:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-# For Zsh users
-echo 'export PATH="$HOME/.local/bin/ms:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# For Fish users
-fish_add_path ~/.local/bin/ms
-```
-
-2. Verify installation:
-```bash
+# Verify Magic Scripts is installed
 ls -la ~/.local/bin/ms/
+ls -la ~/.local/share/magicscripts/
 ```
 
-### Permission denied errors
+#### Fix PATH
+```bash
+# Add to PATH temporarily
+export PATH="$HOME/.local/bin/ms:$PATH"
+
+# Add permanently to shell config
+echo 'export PATH="$HOME/.local/bin/ms:$PATH"' >> ~/.bashrc
+# or for zsh:
+echo 'export PATH="$HOME/.local/bin/ms:$PATH"' >> ~/.zshrc
+
+# Reload shell
+source ~/.bashrc  # or ~/.zshrc
+```
+
+#### Reinstall
+```bash
+# Latest version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+
+# Specific version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v 0.0.1
+```
+
+### 2. Magic Scripts Corrupted or Not Working
+
+**Symptoms:**
+- `ms` commands fail with errors
+- Scripts don't execute properly
+- Configuration is lost
+
+**Solution: Emergency Cleanup**
+
+```bash
+# Complete system cleanup and reinstall
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh | sh
+
+# Then reinstall
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+
+# Or install specific version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v 0.0.1
+```
+
+### 3. Permission Issues
 
 **Symptoms:**
 ```bash
-$ ms status
-bash: ~/.local/bin/ms/ms: Permission denied
+$ ms install gigen
+Error: Permission denied
 ```
 
 **Solutions:**
+
+#### Check Directory Permissions
 ```bash
-# Fix permissions
-chmod +x ~/.local/bin/ms/ms
+# Ensure directories exist and have correct permissions
+mkdir -p ~/.local/bin ~/.local/share
+chmod 755 ~/.local/bin ~/.local/share
+```
+
+#### Fix Installation Directory
+```bash
+# If Magic Scripts directory has wrong permissions
+chmod -R 755 ~/.local/share/magicscripts
 chmod +x ~/.local/bin/ms/*
 ```
 
-### Installation script fails
+### 4. Network Issues
 
 **Symptoms:**
-```bash
-curl: (22) The requested URL returned error: 404 Not Found
-```
+- Installation fails with connection errors
+- Registry updates fail
+- Commands can't be downloaded
 
 **Solutions:**
-1. Check internet connection
-2. Try alternative installation method:
+
+#### Test Connectivity
 ```bash
+# Test connection to Magic Scripts repository
+curl -I https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh
+
+# Alternative with wget
+wget -q --spider https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh
+```
+
+#### Use Alternative Download Method
+```bash
+# If curl fails, try wget
 wget -qO- https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 ```
-3. Manual installation:
+
+#### Corporate Firewall/Proxy
+If you're behind a corporate firewall:
 ```bash
-git clone https://github.com/magic-scripts/ms.git
-cd ms
-./setup.sh
+# Configure proxy (if needed)
+export http_proxy=http://your-proxy:port
+export https_proxy=http://your-proxy:port
+
+# Then retry installation
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+
+# Or specific version
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v 0.0.1
 ```
 
-## Configuration Issues
-
-### Configuration not working
+### 5. Checksum Mismatch Errors
 
 **Symptoms:**
-- Config values not being used by commands
-- `ms config list` shows empty or wrong values
+```bash
+$ ms doctor
+❌ command [version]: Checksum mismatch
+```
 
 **Solutions:**
-1. Check config file location:
+
+#### For Development Versions
+Development versions use `dev` checksum and should be safe:
 ```bash
-ls -la ~/.local/share/magicscripts/config
+# This is normal for dev versions
+ℹ️ command [dev]: Dev version (checksum not verified)
 ```
 
-2. Verify config registry:
+#### For Release Versions
 ```bash
-ms config list -r
+# Reinstall the specific command
+ms reinstall command_name
+
+# Or use doctor to auto-fix
+ms doctor --fix
 ```
 
-3. Reset configuration:
-```bash
-# Backup existing config
-cp ~/.local/share/magicscripts/config ~/.local/share/magicscripts/config.backup
+### 6. Registry Issues
 
-# Regenerate config registry
+**Symptoms:**
+- `ms search` returns no results
+- `ms install` can't find commands
+- Registry updates fail
+
+**Solutions:**
+
+#### Update Registries
+```bash
 ms upgrade
 ```
 
-### Command can't access config
-
-**Symptoms:**
-```bash
-Error: Configuration key 'AUTHOR_NAME' is not registered for this command
-```
-
-**Solutions:**
-1. Check if key is registered:
-```bash
-ms config list -r | grep AUTHOR_NAME
-```
-
-2. Update registries:
-```bash
-ms upgrade
-```
-
-3. Install/reinstall the command:
-```bash
-ms install mycommand --force
-```
-
-## Registry Issues
-
-### Registry update failures
-
-**Symptoms:**
-```bash
-$ ms upgrade
-Error: Failed to download registry from https://...
-```
-
-**Solutions:**
-1. Check internet connectivity
-2. Verify registry URL:
+#### Check Registry Status
 ```bash
 ms reg list
-```
-
-3. Remove and re-add problematic registry:
-```bash
-ms reg remove problematic-registry
-ms reg add problematic-registry https://correct-url.com/registry.msreg
-```
-
-4. Manual registry update:
-```bash
-# Clear cache
-rm -rf ~/.local/share/magicscripts/reg/*.msreg
-ms upgrade
-```
-
-### Registry not found
-
-**Symptoms:**
-```bash
-Error: Registry 'myregistry' not found or empty
-```
-
-**Solutions:**
-1. List available registries:
-```bash
-ms reg list
-```
-
-2. Add the missing registry:
-```bash
-ms reg add myregistry https://example.com/registry.msreg
-```
-
-3. Use correct registry name:
-```bash
-ms install -r default mycommand
-```
-
-## Command Installation Issues
-
-### Download failures
-
-**Symptoms:**
-```bash
-Error: Failed to download script from https://...
-```
-
-**Solutions:**
-1. Check internet connection
-2. Verify URL is accessible:
-```bash
-curl -I https://problematic-url.com/script.sh
-```
-
-3. Try installation with verbose output:
-```bash
-ms install mycommand --verbose
-```
-
-### Checksum verification failures
-
-**Symptoms:**
-```bash
-Error: Checksum mismatch for mycommand
-Expected: abc123...
-Got: def456...
-```
-
-**Solutions:**
-1. Update registries to get latest checksums:
-```bash
-ms upgrade
-```
-
-2. Skip checksum verification (not recommended):
-```bash
-# Only for development/testing
-export MS_SKIP_CHECKSUM=1
-ms install mycommand
-unset MS_SKIP_CHECKSUM
-```
-
-3. Report issue to command maintainer
-
-### Script execution fails
-
-**Symptoms:**
-```bash
-$ mycommand
-/bin/sh: /path/to/script: No such file or directory
-```
-
-**Solutions:**
-1. Check if script file exists:
-```bash
-ls -la ~/.local/share/magicscripts/scripts/mycommand.sh
-```
-
-2. Reinstall the command:
-```bash
-ms uninstall mycommand
-ms install mycommand
-```
-
-3. Check wrapper script:
-```bash
-cat ~/.local/bin/ms/mycommand
-```
-
-## System Diagnostic Tools
-
-### Built-in Diagnostics
-
-```bash
-# Run comprehensive system check
 ms doctor
-
-# Check installation status
-ms status
-
-# Verify specific command
-ms versions mycommand
 ```
 
-### Manual Diagnostics
-
+#### Reset Registries
 ```bash
-# Check directory structure
-ls -la ~/.local/bin/ms/
-ls -la ~/.local/share/magicscripts/
+# Remove and re-add default registry
+ms reg remove default
+ms upgrade  # This will re-add the default registry
+```
 
-# Check PATH configuration
-echo $PATH | grep -o '\.local/bin/ms'
+### 7. Configuration Issues
 
-# Check registry status
-ms reg list
+**Symptoms:**
+- Settings are not saved
+- Commands use wrong author information
+- Configuration commands fail
 
-# Check configuration
+**Solutions:**
+
+#### Check Configuration
+```bash
 ms config list
 ```
 
-## File Permissions Issues
-
-### Scripts not executable
-
-**Solutions:**
+#### Reset Configuration
 ```bash
-# Fix Magic Scripts permissions
-find ~/.local/bin/ms/ -name "*" -exec chmod +x {} \;
-find ~/.local/share/magicscripts/scripts/ -name "*.sh" -exec chmod +x {} \;
+# Remove config file and recreate
+rm ~/.local/share/magicscripts/config
+ms config set AUTHOR_NAME "Your Name"
+ms config set AUTHOR_EMAIL "your@email.com"
 ```
 
-### Configuration file permissions
-
-**Solutions:**
+#### Fix Configuration Permissions
 ```bash
-# Fix config file permissions
 chmod 644 ~/.local/share/magicscripts/config
-chmod 755 ~/.local/share/magicscripts/
 ```
-
-## Network Issues
-
-### HTTPS certificate problems
-
-**Symptoms:**
-```bash
-curl: (60) SSL certificate problem: unable to get local issuer certificate
-```
-
-**Solutions:**
-1. Update certificates:
-```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install ca-certificates
-
-# macOS
-brew install ca-certificates
-
-# CentOS/RHEL
-sudo yum update ca-certificates
-```
-
-2. Use alternative download method:
-```bash
-wget --no-check-certificate -qO- https://...
-```
-
-### Corporate proxy/firewall
-
-**Solutions:**
-1. Configure proxy:
-```bash
-export http_proxy=http://proxy.company.com:8080
-export https_proxy=http://proxy.company.com:8080
-```
-
-2. Use internal mirror if available
-3. Request firewall whitelist for Magic Scripts domains
 
 ## Advanced Troubleshooting
 
-### Enable debug mode
+### Enable Debug Mode
 
+For detailed debugging information:
 ```bash
-# Enable verbose output
-export MS_DEBUG=1
-ms install mycommand
-unset MS_DEBUG
+# Run with debug output
+sh -x ~/.local/share/magicscripts/scripts/ms.sh --version
+
+# Or debug a specific command
+sh -x ~/.local/bin/ms/gigen add node
 ```
 
-### Clean reinstallation
+### Check System Requirements
 
+Magic Scripts requires:
+- POSIX-compliant shell (bash, zsh, dash)
+- curl or wget for downloads
+- Basic Unix utilities (cut, grep, awk, etc.)
+
+Test availability:
 ```bash
-# Complete removal and reinstall
-~/.local/bin/ms/ms uninstall --all
-rm -rf ~/.local/share/magicscripts/
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
-```
-
-### Check system compatibility
-
-```bash
-# Verify shell compatibility
+# Check shell
 echo $SHELL
 
 # Check required tools
-command -v curl || echo "curl missing"
-command -v wget || echo "wget missing" 
-command -v sha256sum || echo "sha256sum missing"
+command -v curl || command -v wget
+command -v cut
+command -v grep  
+command -v awk
+```
+
+### Manual File Locations
+
+If you need to manually inspect or fix files:
+
+```bash
+# Executables
+~/.local/bin/ms/
+
+# Main scripts and data
+~/.local/share/magicscripts/
+├── config                 # Configuration file
+├── core/                  # Core system files
+│   ├── config.sh         # Configuration management
+│   └── registry.sh       # Registry system
+├── scripts/              # Downloaded command scripts
+├── installed/            # Installation metadata  
+└── reg/                  # Registry cache
+
+# Man pages
+~/.local/share/man/man1/ms*.1
 ```
 
 ## Getting Help
 
-If you continue to experience issues:
+If these solutions don't work:
 
-1. **Check system status:**
+1. **Check System Status**
    ```bash
    ms doctor
    ms status
    ```
 
-2. **Search existing issues:**
-   Visit the [GitHub Issues](https://github.com/magic-scripts/ms/issues) page
+2. **Complete Reset** (last resort)
+   ```bash
+   # Emergency cleanup
+   curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh | sh
+   
+   # Fresh installation
+   curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+   
+   # Or install specific version
+   curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v 0.0.1
+   ```
 
-3. **Create a bug report:**
-   Include output from `ms doctor` and `ms status` commands
+3. **Report Issues**
+   - Check [GitHub Issues](https://github.com/magic-scripts/ms/issues)
+   - Create a new issue with:
+     - Your OS and shell version
+     - Complete error messages  
+     - Output of `ms doctor` (if available)
+     - Steps to reproduce the problem
 
-4. **Community support:**
-   Join discussions in the project repository
+## Prevention Tips
+
+- **Regular Updates**: Run `ms upgrade` regularly
+- **Backup Config**: Keep a backup of important configurations
+- **Monitor Disk Space**: Ensure adequate space in `~/.local/`
+- **Shell Compatibility**: Use standard POSIX-compliant shells
+- **Network Stability**: Ensure stable internet for installations
+
+Remember: The cleanup script is your safety net when all else fails!

@@ -34,7 +34,7 @@ show_banner() {
     echo "${MAGENTA}║             ${CYAN}Magic Scripts${MAGENTA}             ║${NC}"
     echo "${MAGENTA}║      ${YELLOW}Developer Automation Tools${MAGENTA}       ║${NC}"
     echo "${MAGENTA}╚═══════════════════════════════════════╝${NC}"
-    echo "${BLUE}Version: ${VERSION}${NC}"
+    echo "${BLUE}Version: ver.${VERSION}${NC}"
     echo ""
 }
 
@@ -1199,7 +1199,7 @@ EOF
     
     # Execute update script if this was an update (version change) and update_script is provided
     if [ "$is_update" = true ] && [ -n "$update_hook_script" ] && [ "$update_hook_script" != "" ]; then
-        echo "  ${CYAN}Running update script for $cmd ($old_version → $target_version)...${NC}"
+        echo "  ${CYAN}Running update script for $cmd (ver.$old_version → ver.$target_version)...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
         
         # Download update script to temp file and execute
@@ -2054,7 +2054,7 @@ handle_update() {
             local comparison=$(compare_versions "$installed_version" "$registry_version")
             
             if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
-                echo "${GREEN}already latest${NC} ($installed_version)"
+                echo "${GREEN}already latest${NC} (ver.$installed_version)"
                 skipped_count=$((skipped_count + 1))
                 continue
             fi
@@ -2065,7 +2065,7 @@ handle_update() {
                     file=$(echo "$script_info" | cut -d'|' -f3)
                     # Force update by passing current registry version
                     if install_script "$cmd" "$file" "default" "$registry_version" >/dev/null 2>&1; then
-                        echo "${GREEN}done${NC} ($installed_version → $registry_version)"
+                        echo "${GREEN}done${NC} (ver.$installed_version → ver.$registry_version)"
                         updated_count=$((updated_count + 1))
                     else
                         echo "${RED}failed${NC}"
@@ -2155,7 +2155,7 @@ handle_update() {
     echo "  Registry:  $registry_version"
     
     if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
-        echo "${GREEN}✓ $cmd is already up to date ($installed_version)${NC}"
+        echo "${GREEN}✓ $cmd is already up to date (ver.$installed_version)${NC}"
         echo "Use ${CYAN}ms install $cmd --force${NC} to reinstall"
         return
     fi
@@ -2171,7 +2171,7 @@ handle_update() {
             printf "  Updating ${CYAN}%s${NC}... " "$cmd"
             if install_script "$cmd" "$file" "default" "$registry_version"; then
                 echo "${GREEN}done${NC}"
-                echo "Successfully updated $cmd ($installed_version → $registry_version)"
+                echo "Successfully updated $cmd (ver.$installed_version → ver.$registry_version)"
             else
                 echo "${RED}failed${NC}"
                 echo "${RED}Error: Failed to update $cmd${NC}"
@@ -2272,7 +2272,7 @@ handle_doctor() {
                 if [ "$installed_version" != "unknown" ] && [ "$registry_version" != "unknown" ]; then
                     local comparison=$(compare_versions "$installed_version" "$registry_version")
                     if [ "$comparison" = "update_needed" ]; then
-                        update_status=" ${YELLOW}(update available: $registry_version)${NC}"
+                        update_status=" ${YELLOW}(update available: ver.$registry_version)${NC}"
                     fi
                 fi
                 

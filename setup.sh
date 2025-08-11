@@ -20,7 +20,6 @@ REGISTRY_URL="$RAW_URL/registry/ms.msreg"
 
 # Version parameters
 REQUESTED_VERSION=""
-ALLOW_DEV=false
 
 check_command() {
     command -v "$1" >/dev/null 2>&1
@@ -154,9 +153,6 @@ find_best_ms_version() {
                 dev_install_script="$install_script"
                 dev_uninstall_script="$uninstall_script"
                 # Skip dev versions unless explicitly allowed
-                if [ "$ALLOW_DEV" = false ]; then
-                    continue
-                fi
             fi
             
             # Find highest version (skip dev in version comparison)
@@ -176,8 +172,8 @@ find_best_ms_version() {
                         best_uninstall_script="$uninstall_script"
                     fi
                 fi
-            elif [ "$ALLOW_DEV" = true ]; then
-                # If dev is allowed, it can be the best version
+            else
+                # Dev version - can be used if requested or as fallback
                 if [ -z "$best_version" ]; then
                     best_version="$version"
                     best_url="$url" 
@@ -253,14 +249,14 @@ show_help() {
     echo "  install.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  -v, --version VERSION    Install specific version (e.g., 0.0.1, 0.0.2)"
-    echo "  -d, --dev               Allow dev version installation" 
+    echo "  -v, --version VERSION    Install specific version (e.g., 0.0.1, 0.0.2, dev)"
+ 
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
     echo "  install.sh                     # Install latest stable version"
     echo "  install.sh -v 0.0.1           # Install specific version"
-    echo "  install.sh -v dev -d           # Install dev version"
+    echo "  install.sh -v dev             # Install dev version"
     echo ""
 }
 
@@ -270,10 +266,6 @@ while [ $# -gt 0 ]; do
         -v|--version)
             REQUESTED_VERSION="$2"
             shift 2
-            ;;
-        -d|--dev)
-            ALLOW_DEV=true
-            shift
             ;;
         -h|--help)
             show_help
@@ -288,7 +280,7 @@ while [ $# -gt 0 ]; do
 done
 
 echo "========================================="
-echo "        Magic Scripts Setup v0.0.1      "
+echo "        Magic Scripts Setup ver.0.0.1      "
 echo "       Developer Automation Tools       "
 echo "========================================="
 echo ""
@@ -312,11 +304,6 @@ echo ""
 echo "Determining version to install..."
 if [ -n "$REQUESTED_VERSION" ]; then
     echo "Requested version: $REQUESTED_VERSION"
-    if [ "$REQUESTED_VERSION" = "dev" ] && [ "$ALLOW_DEV" = false ]; then
-        echo "${RED}Error: Dev version requested but --dev flag not provided${NC}"
-        echo "Use: install.sh -v dev -d"
-        exit 1
-    fi
 else
     echo "Finding latest stable version..."
 fi
@@ -370,7 +357,7 @@ echo "Installing Magic Scripts core system..."
     # Registry system will be initialized automatically by ms.sh
     # No need to download registry files during installation
     
-    printf "  Downloading ms.sh (v$MS_VERSION)... "
+    printf "  Downloading ms.sh (ver.$MS_VERSION)... "
     if download_file "$MS_URL" "$MAGIC_DIR/scripts/ms.sh"; then
         chmod 755 "$MAGIC_DIR/scripts/ms.sh"
         printf "${GREEN}done${NC}\n"
@@ -472,7 +459,7 @@ fi
 
 echo ""
 echo "========================================="
-echo "${GREEN}✅ Magic Scripts v0.0.1 installed!${NC}"
+echo "${GREEN}✅ Magic Scripts ver.$MS_VERSION installed!${NC}"
 echo "========================================="
 echo ""
 echo "Installed core command:"

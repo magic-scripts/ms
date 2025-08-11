@@ -2,6 +2,8 @@
 
 set -e
 
+VERSION="0.0.1"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -123,7 +125,7 @@ fi
 
 echo ""
 echo "========================================="
-echo "${GREEN}✅ Magic Scripts v0.0.1 uninstalled!${NC}"
+echo "${GREEN}✅ Magic Scripts ver.$VERSION uninstalled!${NC}"
 echo "========================================="
 echo ""
 
