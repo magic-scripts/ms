@@ -601,14 +601,15 @@ install_registry_all() {
         
         local install_result
         if [ -n "$version_info" ]; then
-            # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
+            # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url
             local script_url=$(echo "$version_info" | cut -d'|' -f3)
             local version_name=$(echo "$version_info" | cut -d'|' -f2)
             local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
             local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
             local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
+            local man_url=$(echo "$version_info" | cut -d'|' -f8)
             
-            install_script "$cmd" "$script_url" "$registry_name" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url"
+            install_script "$cmd" "$script_url" "$registry_name" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
             install_result=$?
         else
             echo "${RED}no version available${NC}"
@@ -754,13 +755,14 @@ install_commands_with_detection() {
             
             local install_result
             if [ -n "$version_info" ]; then
-                # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
+                # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|man_url
                 local script_url=$(echo "$version_info" | cut -d'|' -f3)
                 local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
                 local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
                 local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
+                local man_url=$(echo "$version_info" | cut -d'|' -f8)
                 
-                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script"
+                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url"
                 install_result=$?
             else
                 echo "${RED}no version available${NC}"
@@ -823,13 +825,14 @@ install_commands_with_detection() {
                 
                 local install_result
                 if [ -n "$version_info" ]; then
-                    # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
+                    # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|man_url|man_url
                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
                     local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
                     local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                     local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
+                    local man_url=$(echo "$version_info" | cut -d'|' -f8)
                     
-                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url"
+                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
                     install_result=$?
                 else
                     echo "${RED}no version available${NC}"
@@ -945,15 +948,16 @@ handle_install() {
                     if [ -n "$version_info" ]; then
                         printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"
                         
-                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script
+                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|man_url|man_url
                         local script_url=$(echo "$version_info" | cut -d'|' -f3)
                         local version_name=$(echo "$version_info" | cut -d'|' -f2)
                         local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
                         local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                         local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
+                        local man_url=$(echo "$version_info" | cut -d'|' -f8)
                         
                         local install_result
-                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url"
+                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
                         install_result=$?
                     else
                         printf "  Installing ${CYAN}%s${NC}... " "$cmd"
@@ -1018,6 +1022,7 @@ install_script() {
     local install_hook_script="$6"  # Optional: install script URL
     local uninstall_hook_script="$7"  # Optional: uninstall script URL
     local update_hook_script="$8"  # Optional: update script URL
+    local man_url="$9"        # Optional: man page URL
     
     # Handle legacy calls without version parameter
     if [ "$4" = "force" ]; then
@@ -1127,6 +1132,41 @@ MAGIC_SCRIPT_DIR="$MAGIC_DATA_DIR"
 exec "$target_script" "\$@"
 EOF
     chmod 755 "$INSTALL_DIR/$cmd"
+    
+    # Download and install man page if provided
+    if [ -n "$man_url" ] && [ "$man_url" != "" ]; then
+        local man_dir="$HOME/.local/share/man/man1"
+        local man_file="$man_dir/$cmd.1"
+        
+        # Create man directory if it doesn't exist
+        mkdir -p "$man_dir"
+        
+        # Download man page
+        local man_download_success=false
+        if [[ "$man_url" =~ ^https?:// ]]; then
+            # Remote URL - download it
+            if command -v curl >/dev/null 2>&1; then
+                if curl -fsSL "$man_url" -o "$man_file" 2>/dev/null; then
+                    man_download_success=true
+                fi
+            elif command -v wget >/dev/null 2>&1; then
+                if wget -q "$man_url" -O "$man_file" 2>/dev/null; then
+                    man_download_success=true
+                fi
+            fi
+        elif [ -f "$man_url" ]; then
+            # Local file - copy it
+            if cp "$man_url" "$man_file" 2>/dev/null; then
+                man_download_success=true
+            fi
+        fi
+        
+        if [ "$man_download_success" = true ]; then
+            echo "  ${GREEN}Installed${NC}: $cmd man page"
+        else
+            echo "  ${YELLOW}Warning: Could not download man page from $man_url${NC}"
+        fi
+    fi
     
     # Get registry information for metadata
     local final_registry_name="${registry_name:-default}"
@@ -1553,6 +1593,12 @@ handle_uninstall() {
                 fi
                 
                 echo "  ${GREEN}Removed${NC}: $cmd$registry_info"
+                
+                # Remove man page if exists
+                if [ -f "$HOME/.local/share/man/man1/$cmd.1" ]; then
+                    rm -f "$HOME/.local/share/man/man1/$cmd.1"
+                    echo "  ${GREEN}Removed${NC}: $cmd man page"
+                fi
                 
                 # Remove metadata
                 remove_installation_metadata "$cmd"
@@ -2054,6 +2100,7 @@ handle_reinstall() {
                     local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
                     local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
                     local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
+                    local man_url=$(echo "$version_info" | cut -d'|' -f8)
                     
                     # Get the registry name from metadata or find which registry has this command
                     local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
@@ -2070,7 +2117,7 @@ handle_reinstall() {
                         fi
                     fi
                     
-                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script"; then
+                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url"; then
                         echo "${GREEN}done${NC}"
                         reinstall_count=$((reinstall_count + 1))
                     else
@@ -2123,12 +2170,13 @@ handle_ms_force_reinstall() {
         return 1
     fi
     
-    local script_url install_script_url uninstall_script_url update_script_url version_name
+    local script_url install_script_url uninstall_script_url update_script_url man_url version_name
     script_url=$(echo "$ms_info" | cut -d'|' -f3)
     version_name=$(echo "$ms_info" | cut -d'|' -f2)
     install_script_url=$(echo "$ms_info" | cut -d'|' -f5)
     uninstall_script_url=$(echo "$ms_info" | cut -d'|' -f6)
     update_script_url=$(echo "$ms_info" | cut -d'|' -f7)
+    man_url=$(echo "$ms_info" | cut -d'|' -f8)
     
     if [ -z "$script_url" ]; then
         echo "${RED}✗ Invalid ms version information${NC}"
@@ -2143,7 +2191,7 @@ handle_ms_force_reinstall() {
     
     # Use install_script function to reinstall ms with force flag
     local install_result
-    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url"; then
+    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"; then
         install_result=0
     else
         install_result=1
@@ -2293,7 +2341,7 @@ handle_update() {
                 if [ -n "$script_info" ]; then
                     file=$(echo "$script_info" | cut -d'|' -f3)
                     # Force update by passing current registry version
-                    if install_script "$cmd" "$file" "default" "$registry_version" >/dev/null 2>&1; then
+                    if install_script "$cmd" "$file" "default" "$registry_version" "" "" "" "" "" >/dev/null 2>&1; then
                         echo "${GREEN}done${NC} ($(format_version "$installed_version") → $(format_version "$registry_version"))"
                         updated_count=$((updated_count + 1))
                     else
@@ -2419,7 +2467,7 @@ handle_update() {
         if [ -n "$script_info" ]; then
             file=$(echo "$script_info" | cut -d'|' -f3)
             printf "  Updating ${CYAN}%s${NC}... " "$cmd"
-            if install_script "$cmd" "$file" "default" "$registry_version"; then
+            if install_script "$cmd" "$file" "default" "$registry_version" "" "" "" "" ""; then
                 echo "${GREEN}done${NC}"
                 echo "Successfully updated $cmd ($(format_version "$installed_version") → $(format_version "$registry_version"))"
             else
@@ -2546,11 +2594,12 @@ handle_doctor() {
                                     local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
                                     local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                                     local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
+                                    local man_url=$(echo "$version_info" | cut -d'|' -f8)
                                     local registry_name=$(get_installation_metadata "$cmd" "registry_name")
                                     if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
                                         registry_name="default"
                                     fi
-                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" >/dev/null 2>&1; then
+                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" >/dev/null 2>&1; then
                                         echo "    ✅ $cmd: Reinstalled successfully"
                                         fixed_issues=$((fixed_issues + 1))
                                     else

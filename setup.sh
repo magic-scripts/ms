@@ -394,17 +394,6 @@ exec "\$MAGIC_SCRIPT_DIR/scripts/ms.sh" "\$@"
 EOF
 chmod 755 "$INSTALL_DIR/ms"
 
-# Install man page
-printf "  Installing man page... "
-MAN_DIR="$HOME/.local/share/man/man1"
-mkdir -p "$MAN_DIR"
-if download_file "$RAW_URL/man/ms.1" "$MAN_DIR/ms.1"; then
-    printf "${GREEN}done${NC}\n"
-else
-    printf "${YELLOW}failed${NC}\n"
-    echo "  ${YELLOW}Warning: Could not install man page. Manual will not be available.${NC}"
-fi
-
 # Create metadata directory and file for ms command
 mkdir -p "$MAGIC_DIR/installed"
 cat > "$MAGIC_DIR/installed/ms.msmeta" << EOF
