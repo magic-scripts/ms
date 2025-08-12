@@ -1332,6 +1332,42 @@ handle_uninstall() {
                         ;;
                 esac
                 echo ""
+                
+                # Direct removal for ms core - don't rely on external script
+                echo "  ${CYAN}Removing Magic Scripts core...${NC}"
+                
+                # Remove ms command
+                if [ -f "$INSTALL_DIR/ms" ]; then
+                    rm -f "$INSTALL_DIR/ms"
+                    echo "  ${GREEN}Removed${NC}: ms command"
+                fi
+                
+                # Remove core data directory
+                if [ -d "$HOME/.local/share/magicscripts" ]; then
+                    rm -rf "$HOME/.local/share/magicscripts"
+                    echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+                fi
+                
+                # Remove man page
+                if [ -f "$HOME/.local/share/man/man1/ms.1" ]; then
+                    rm -f "$HOME/.local/share/man/man1/ms.1"
+                    echo "  ${GREEN}Removed${NC}: ms man page"
+                fi
+                
+                # Clean shell config
+                for config_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+                    if [ -f "$config_file" ] && grep -q "\.local/bin/ms" "$config_file"; then
+                        cp "$config_file" "${config_file}.magic-scripts-backup"
+                        grep -v "# Magic Scripts" "$config_file" | \
+                        grep -v "\.local/bin/ms" | \
+                        grep -v "\.local/share/man" > "${config_file}.tmp"
+                        mv "${config_file}.tmp" "$config_file"
+                        echo "  ${GREEN}Cleaned${NC}: $(basename "$config_file")"
+                    fi
+                done
+                
+                echo "  ${GREEN}Magic Scripts has been completely removed.${NC}"
+                exit 0
             fi
             
             # Check if this command came from registry
@@ -1344,7 +1380,7 @@ handle_uninstall() {
             fi
             
             # Execute uninstall script if exists
-            local uninstall_script_url=$(get_installation_metadata "$cmd" "uninstall_script_url")
+            local uninstall_script_url=$(get_installation_metadata "$cmd" "uninstall_script")
             if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
                 echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
                 echo "  ${YELLOW}═══════════════════════════════════════${NC}"
@@ -1386,10 +1422,21 @@ handle_uninstall() {
                     fi
                 else
                     echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
-                    # If ms uninstall script failed, we should abort
+                    # If ms uninstall script failed, try direct removal as fallback
                     if [ "$cmd" = "ms" ]; then
-                        echo "  ${RED}Error: Magic Scripts uninstallation failed. Aborting.${NC}"
-                        return 1
+                        echo "  ${YELLOW}Attempting direct removal as fallback...${NC}"
+                        # Direct removal of ms core files
+                        if [ -f "$INSTALL_DIR/ms" ]; then
+                            rm -f "$INSTALL_DIR/ms"
+                            echo "  ${GREEN}Removed${NC}: ms command"
+                        fi
+                        # Remove core data
+                        if [ -d "$HOME/.local/share/magicscripts" ]; then
+                            rm -rf "$HOME/.local/share/magicscripts"
+                            echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+                        fi
+                        echo "  ${GREEN}Magic Scripts has been removed via fallback method.${NC}"
+                        exit 0
                     fi
                 fi
             fi
@@ -1796,7 +1843,7 @@ handle_reinstall() {
         # First, execute uninstall script if exists (before removing files)
         local INSTALL_DIR="$HOME/.local/bin/ms"
         if [ -f "$INSTALL_DIR/$base_cmd" ]; then
-            local uninstall_script_url=$(get_installation_metadata "$base_cmd" "uninstall_script_url")
+            local uninstall_script_url=$(get_installation_metadata "$base_cmd" "uninstall_script")
             if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
                 echo ""
                 echo "    ${CYAN}Running uninstall script for $base_cmd...${NC}"
