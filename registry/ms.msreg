@@ -7,10 +7,5 @@
 
 # Core Commands - pointing to individual .msver files in registry/ directories
 ms|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msver|Magic Scripts main interface|core
-gigen|https://raw.githubusercontent.com/magic-scripts/gigen/main/registry/gigen.msver|.gitignore template generator|development
-licgen|https://raw.githubusercontent.com/magic-scripts/licgen/main/registry/licgen.msver|License generator for various licenses|development
 pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/main/registry/pgadduser.msver|PostgreSQL user and database setup|database
-dcwinit|https://raw.githubusercontent.com/magic-scripts/dcwinit/main/registry/dcwinit.msver|Docker Compose wireframe generator|docker
-dockergen|https://raw.githubusercontent.com/magic-scripts/dockergen/main/registry/dockergen.msver|Optimized Dockerfile generator for various runtimes|docker
-projinit|https://raw.githubusercontent.com/magic-scripts/projinit/main/registry/projinit.msver|Project initializer for various frameworks|development
 mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/registry/mschecksum.msver|SHA256 checksum calculator for Magic Scripts|utilities
