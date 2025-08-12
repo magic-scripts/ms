@@ -1285,10 +1285,11 @@ handle_uninstall() {
             get_all_commands | while IFS= read -r cmd; do
                 if [ -f "$INSTALL_DIR/$cmd" ]; then
                     local source_registry="unknown"
-                    # Try to determine which registry this command came from
-                    if command -v get_script_info >/dev/null 2>&1; then
-                        if get_script_info "$cmd" >/dev/null 2>&1; then
-                            source_registry="(from registry)"
+                    # Try to get registry name from installation metadata
+                    if command -v get_installation_metadata >/dev/null 2>&1; then
+                        local registry_name=$(get_installation_metadata "$cmd" "registry_name" 2>/dev/null)
+                        if [ -n "$registry_name" ] && [ "$registry_name" != "unknown" ]; then
+                            source_registry="(from $registry_name)"
                         fi
                     fi
                     echo "  $cmd $source_registry"
@@ -1341,19 +1342,109 @@ handle_uninstall() {
                 esac
                 echo ""
                 
+                # Check if other Magic Scripts commands are installed
+                local other_commands=""
+                local remove_all=false
+                if [ -d "$INSTALL_DIR" ]; then
+                    for cmd_file in "$INSTALL_DIR"/*; do
+                        [ -e "$cmd_file" ] || continue
+                        if [ -x "$cmd_file" ]; then
+                            local cmd=$(basename "$cmd_file")
+                            if [ "$cmd" != "ms" ]; then
+                                other_commands="$other_commands $cmd"
+                            fi
+                        fi
+                    done
+                fi
+                
+                # If other commands exist, ask what to do
+                if [ -n "$other_commands" ]; then
+                    echo "  ${YELLOW}Other Magic Scripts commands are installed:${NC}$other_commands"
+                    echo ""
+                    printf "  ${YELLOW}What would you like to do?${NC}\n"
+                    printf "  ${CYAN}1)${NC} Remove only ms (keep other commands)\n"
+                    printf "  ${CYAN}2)${NC} Remove all Magic Scripts commands\n"
+                    printf "  ${CYAN}3)${NC} Cancel uninstallation\n"
+                    echo ""
+                    printf "  Choose [1-3]: "
+                    if [ -t 0 ]; then
+                        read -r choice < /dev/tty
+                    else
+                        exec < /dev/tty
+                        read -r choice
+                    fi
+                    
+                    case "$choice" in
+                        2)
+                            remove_all=true
+                            echo "  ${YELLOW}Will remove all Magic Scripts commands${NC}"
+                            ;;
+                        3)
+                            echo "  ${CYAN}Uninstallation cancelled.${NC}"
+                            return 1
+                            ;;
+                        1|"")
+                            echo "  ${YELLOW}Will keep other commands${NC}"
+                            ;;
+                        *)
+                            echo "  ${YELLOW}Invalid choice, keeping other commands${NC}"
+                            ;;
+                    esac
+                    echo ""
+                fi
+                
                 # Direct removal for ms core - don't rely on external script
                 echo "  ${CYAN}Removing Magic Scripts core...${NC}"
                 
-                # Remove ms command
-                if [ -f "$INSTALL_DIR/ms" ]; then
-                    rm -f "$INSTALL_DIR/ms"
-                    echo "  ${GREEN}Removed${NC}: ms command"
-                fi
-                
-                # Remove core data directory
-                if [ -d "$HOME/.local/share/magicscripts" ]; then
-                    rm -rf "$HOME/.local/share/magicscripts"
-                    echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+                if [ "$remove_all" = true ]; then
+                    # Remove all commands and installation directory
+                    if [ -d "$INSTALL_DIR" ]; then
+                        rm -rf "$INSTALL_DIR"
+                        echo "  ${GREEN}Removed${NC}: all Magic Scripts commands"
+                    fi
+                    
+                    # Remove core data directory
+                    if [ -d "$HOME/.local/share/magicscripts" ]; then
+                        rm -rf "$HOME/.local/share/magicscripts"
+                        echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+                    fi
+                else
+                    # Remove only ms command
+                    if [ -f "$INSTALL_DIR/ms" ]; then
+                        rm -f "$INSTALL_DIR/ms"
+                        echo "  ${GREEN}Removed${NC}: ms command"
+                    fi
+                    
+                    # Remove install directory if empty
+                    if [ -d "$INSTALL_DIR" ]; then
+                        if [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+                            rmdir "$INSTALL_DIR"
+                            echo "  ${GREEN}Removed${NC}: empty installation directory"
+                        fi
+                    fi
+                    
+                    # Remove only ms-specific data, keep other command data
+                    if [ -d "$HOME/.local/share/magicscripts" ]; then
+                        # Remove ms metadata
+                        if [ -f "$HOME/.local/share/magicscripts/installed/ms.msmeta" ]; then
+                            rm -f "$HOME/.local/share/magicscripts/installed/ms.msmeta"
+                            echo "  ${GREEN}Removed${NC}: ms metadata"
+                        fi
+                        
+                        # Remove ms script
+                        if [ -f "$HOME/.local/share/magicscripts/scripts/ms.sh" ]; then
+                            rm -f "$HOME/.local/share/magicscripts/scripts/ms.sh"
+                            echo "  ${GREEN}Removed${NC}: ms script"
+                        fi
+                        
+                        # Only remove data directory if empty
+                        if [ -z "$(ls -A "$HOME/.local/share/magicscripts" 2>/dev/null)" ]; then
+                            rm -rf "$HOME/.local/share/magicscripts"
+                            echo "  ${GREEN}Removed${NC}: empty data directory"
+                        else
+                            echo "  ${YELLOW}Kept${NC}: data directory (other commands' data preserved)"
+                        fi
+                    fi
                 fi
                 
                 # Remove man page
@@ -1362,17 +1453,22 @@ handle_uninstall() {
                     echo "  ${GREEN}Removed${NC}: ms man page"
                 fi
                 
-                # Clean shell config
-                for config_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
-                    if [ -f "$config_file" ] && grep -q "\.local/bin/ms" "$config_file"; then
-                        cp "$config_file" "${config_file}.magic-scripts-backup"
-                        grep -v "# Magic Scripts" "$config_file" | \
-                        grep -v "\.local/bin/ms" | \
-                        grep -v "\.local/share/man" > "${config_file}.tmp"
-                        mv "${config_file}.tmp" "$config_file"
-                        echo "  ${GREEN}Cleaned${NC}: $(basename "$config_file")"
-                    fi
-                done
+                # Clean shell config based on remove_all choice
+                if [ "$remove_all" = true ] || [ ! -d "$INSTALL_DIR" ] || [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+                    # Remove PATH if removing all commands or no commands remain
+                    for config_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+                        if [ -f "$config_file" ] && grep -q "\.local/bin/ms" "$config_file"; then
+                            cp "$config_file" "${config_file}.magic-scripts-backup"
+                            grep -v "# Magic Scripts" "$config_file" | \
+                            grep -v "\.local/bin/ms" | \
+                            grep -v "\.local/share/man" > "${config_file}.tmp"
+                            mv "${config_file}.tmp" "$config_file"
+                            echo "  ${GREEN}Cleaned${NC}: $(basename "$config_file")"
+                        fi
+                    done
+                else
+                    echo "  ${YELLOW}Kept${NC}: shell config (other Magic Scripts commands still installed)"
+                fi
                 
                 echo "  ${GREEN}Magic Scripts has been completely removed.${NC}"
                 exit 0
