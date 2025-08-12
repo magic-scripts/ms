@@ -1318,7 +1318,12 @@ handle_uninstall() {
                 echo "  ${YELLOW}This action cannot be undone.${NC}"
                 echo ""
                 printf "  Are you sure you want to continue? [y/N]: "
-                read -r confirmation
+                if [ -t 0 ]; then
+                    read -r confirmation < /dev/tty
+                else
+                    exec < /dev/tty
+                    read -r confirmation
+                fi
                 case "$confirmation" in
                     [Yy]|[Yy][Ee][Ss]) ;;
                     *) 

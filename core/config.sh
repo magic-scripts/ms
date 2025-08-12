@@ -406,7 +406,12 @@ ms_internal_interactive_config_setup() {
         echo "  6) development - Development tools settings"
         echo ""
         printf "Enter category (1-6) or command name: "
-        read -r choice
+        if [ -t 0 ]; then
+            read -r choice < /dev/tty
+        else
+            exec < /dev/tty
+            read -r choice
+        fi
         
         case "$choice" in
             1) ms_internal_interactive_setup_category "" ;;
@@ -464,7 +469,12 @@ ms_internal_interactive_setup_category() {
         printf "%-20s  Current: %s\n" "" "${current_value:-<not set>}"
         printf "%-20s  Default: %s\n" "" "${default:-<none>}"
         printf "Enter new value (or press Enter to keep current): "
-        read -r new_value
+        if [ -t 0 ]; then
+            read -r new_value < /dev/tty
+        else
+            exec < /dev/tty
+            read -r new_value
+        fi
         
         if [ -n "$new_value" ]; then
             set_config_value "$key" "$new_value"
@@ -513,7 +523,12 @@ ms_internal_interactive_setup_command() {
         printf "%-20s  Current: %s\n" "" "${current_value:-<not set>}"
         printf "%-20s  Default: %s\n" "" "${default:-<none>}"
         printf "Enter new value (or press Enter to keep current): "
-        read -r new_value
+        if [ -t 0 ]; then
+            read -r new_value < /dev/tty
+        else
+            exec < /dev/tty
+            read -r new_value
+        fi
         
         if [ -n "$new_value" ]; then
             set_config_value "$key" "$new_value"
@@ -551,7 +566,12 @@ EOF
     echo "Default value: ${default:-<none>}"
     echo ""
     printf "Enter new value (or press Enter to keep current): "
-    read -r new_value
+    if [ -t 0 ]; then
+        read -r new_value < /dev/tty
+    else
+        exec < /dev/tty
+        read -r new_value
+    fi
     
     if [ -n "$new_value" ]; then
         set_config_value "$key" "$new_value"

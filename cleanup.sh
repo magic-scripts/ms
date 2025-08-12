@@ -91,7 +91,16 @@ confirm_removal() {
     echo ""
     printf "Are you sure you want to completely remove Magic Scripts? "
     printf "${YELLOW}Type 'yes' to confirm: ${NC}"
-    read -r reply
+    
+    # Fix: Use /dev/tty for input when available
+    if [ -t 0 ]; then
+        # Interactive mode
+        read -r reply < /dev/tty
+    else
+        # Non-interactive mode or piped input - force tty
+        exec < /dev/tty
+        read -r reply
+    fi
     
     case "$reply" in
         yes|YES)
