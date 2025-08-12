@@ -1187,11 +1187,7 @@ EOF
         if [ "$install_success" = true ]; then
             echo "  ${GREEN}Install script completed successfully${NC}"
         else
-            echo "${RED}Install script failed for $cmd${NC}" >&2
-            # Clean up on failure
-            rm -f "$INSTALL_DIR/$cmd" 2>/dev/null
-            rm -f "$target_script" 2>/dev/null
-            return 1
+            echo "${YELLOW}Warning: Install script failed for $cmd, proceeding with installation${NC}" >&2
         fi
     fi
     
