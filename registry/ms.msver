@@ -5,6 +5,6 @@
 # Version information
 # install_script, uninstall_script, and update_script are optional (use empty string if not needed)
 # update_script is executed when updating TO this version (e.g., 1.0.0 -> 1.0.1 runs 1.0.1's update_script)
-version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/ms.sh|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/install.sh|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/uninstall.sh|
+version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/ms.sh|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/install.sh|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/uninstall.sh|https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh
 
 # Configuration keys (none for ms core - configurations are managed by individual commands)

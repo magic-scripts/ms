@@ -3,15 +3,20 @@
 # Magic Scripts Registry System
 # URL-based registry management with multi-source support
 
-VERSION="0.0.1"
+VERSION="dev"
 
 # Registry directories and files
 REG_DIR="$HOME/.local/share/magicscripts/reg"
 REGLIST_FILE="$REG_DIR/reglist"
 
-# Default registry URL
+# Default registry configuration
 DEFAULT_REGISTRY_NAME="default"
-DEFAULT_REGISTRY_URL="https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msreg"
+
+# Construct DEFAULT_REGISTRY_URL dynamically like setup.sh
+get_default_registry_url() {
+    local raw_url="https://raw.githubusercontent.com/magic-scripts/ms/main"
+    echo "$raw_url/registry/ms.msreg"
+}
 
 # Initialize registry directories and default reglist
 init_registry_dirs() {
@@ -21,7 +26,7 @@ init_registry_dirs() {
     if [ ! -f "$REGLIST_FILE" ]; then
         echo "# Magic Scripts Registry List" > "$REGLIST_FILE"
         echo "# Format: name:url" >> "$REGLIST_FILE"
-        echo "$DEFAULT_REGISTRY_NAME:$DEFAULT_REGISTRY_URL" >> "$REGLIST_FILE"
+        echo "$DEFAULT_REGISTRY_NAME:$(get_default_registry_url)" >> "$REGLIST_FILE"
     else
         # Migrate from old 'ms' registry name to 'default'
         if grep -q "^ms:" "$REGLIST_FILE" && ! grep -q "^default:" "$REGLIST_FILE"; then

@@ -32,7 +32,7 @@ for lib in config.sh registry.sh; do
 done
 
 # Version
-VERSION="0.0.1"
+VERSION="dev"
 
 # Colors
 RED='\033[0;31m'
@@ -329,11 +329,21 @@ show_status() {
     
     INSTALL_DIR="$HOME/.local/bin/ms"
     
-    # Get installed commands
+    # Get installed commands by scanning install directory
     if command -v get_all_commands >/dev/null 2>&1; then
         all_commands=$(get_all_commands | tr '\n' ' ')
     else
-        all_commands="ms pgadduser dcwinit dockergen gigen licgen projinit"
+        # Fallback: scan installation directory directly
+        all_commands=""
+        if [ -d "$INSTALL_DIR" ]; then
+            for cmd_file in "$INSTALL_DIR"/*; do
+                [ -e "$cmd_file" ] || continue
+                if [ -x "$cmd_file" ]; then
+                    local cmd=$(basename "$cmd_file")
+                    all_commands="$all_commands $cmd"
+                fi
+            done
+        fi
     fi
     
     echo "${CYAN}Installed Commands:${NC}"
@@ -1150,7 +1160,9 @@ EOF
             registry_url=$(get_registry_url "default" 2>/dev/null)
         fi
         if [ -z "$registry_url" ] || [ "$registry_url" = "unknown" ]; then
-            registry_url="https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msreg"
+            # Construct default registry URL dynamically like setup.sh
+            local raw_url="https://raw.githubusercontent.com/magic-scripts/ms/main"
+            registry_url="$raw_url/registry/ms.msreg"
         fi
     fi
     
@@ -1192,7 +1204,7 @@ EOF
     fi
     
     # Record comprehensive installation metadata
-    set_installation_metadata "$cmd" "$target_version" "$final_registry_name" "$registry_url" "$registry_checksum" "$target_script" "$uninstall_hook_script"
+    set_installation_metadata "$cmd" "$target_version" "$final_registry_name" "$registry_url" "$registry_checksum" "$target_script" "$install_hook_script" "$uninstall_hook_script"
     
     # Verify installation integrity
     verify_command_checksum "$cmd"
@@ -1550,7 +1562,8 @@ set_installation_metadata() {
     local registry_url="$4"  
     local checksum="$5"
     local script_path="$6"
-    local uninstall_script_url="$7"  # Optional: uninstall script URL
+    local install_script="$7"      # Optional: install script URL
+    local uninstall_script="$8"    # Optional: uninstall script URL
     
     local installed_dir="$HOME/.local/share/magicscripts/installed"
     local meta_file="$installed_dir/$cmd.msmeta"
@@ -1566,7 +1579,8 @@ registry_url=${registry_url:-unknown}
 checksum=${checksum:-unknown}
 installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
 script_path=${script_path:-unknown}
-uninstall_script_url=${uninstall_script_url:-}
+install_script=${install_script:-}
+uninstall_script=${uninstall_script:-}
 EOF
 }
 
@@ -1742,7 +1756,18 @@ handle_versions() {
         if command -v get_all_commands >/dev/null 2>&1; then
             local all_commands=$(get_all_commands | tr '\n' ' ')
         else
-            all_commands="ms pgadduser dcwinit dockergen gigen licgen projinit"
+            # Fallback: scan installation directory directly
+            local all_commands=""
+            local install_dir="$HOME/.local/bin/ms"
+            if [ -d "$install_dir" ]; then
+                for cmd_file in "$install_dir"/*; do
+                    [ -e "$cmd_file" ] || continue
+                    if [ -x "$cmd_file" ]; then
+                        local cmd=$(basename "$cmd_file")
+                        all_commands="$all_commands $cmd"
+                    fi
+                done
+            fi
         fi
         
         printf "%-12s %-12s %-12s\n" "Command" "Installed" "Registry"
@@ -2051,8 +2076,28 @@ handle_update() {
     if [ "$1" = "ms" ]; then
         echo "${YELLOW}Updating Magic Scripts core...${NC}"
         
-        # Use update.sh for ms update
-        local update_script_url="https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh"
+        # Get update script URL from ms.msreg -> ms.msver  
+        local update_script_url
+        if command -v ms_internal_get_script_info >/dev/null 2>&1; then
+            local ms_info=$(ms_internal_get_script_info "ms" 2>/dev/null)
+            if [ -n "$ms_info" ]; then
+                # Get msver URL from ms_info (format: command|cmd|uri|desc|category|version|checksum)
+                local msver_url=$(echo "$ms_info" | cut -d'|' -f3)
+                # Download and parse msver to get update_script (field 7)
+                if command -v download_and_parse_msver >/dev/null 2>&1; then
+                    local version_info=$(download_and_parse_msver "$msver_url" "ms" 2>/dev/null | grep "^version|" | head -1)
+                    if [ -n "$version_info" ]; then
+                        update_script_url=$(echo "$version_info" | cut -d'|' -f7)
+                    fi
+                fi
+            fi
+        fi
+        
+        # Fallback to hardcoded URL if dynamic lookup fails
+        if [ -z "$update_script_url" ]; then
+            local raw_url="https://raw.githubusercontent.com/magic-scripts/ms/main"
+            update_script_url="$raw_url/installer/update.sh"
+        fi
         local temp_update=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
         
         printf "  Downloading update script... "
@@ -2193,17 +2238,38 @@ handle_update() {
         elif [ -f "$MAGIC_SCRIPT_DIR/installer/update.sh" ]; then
             upgrade_script="$MAGIC_SCRIPT_DIR/installer/update.sh"
         else
-            # Download upgrade script from GitHub
+            # Get update script URL dynamically (same logic as update command)
+            local update_script_url
+            if command -v ms_internal_get_script_info >/dev/null 2>&1; then
+                local ms_info=$(ms_internal_get_script_info "ms" 2>/dev/null)
+                if [ -n "$ms_info" ]; then
+                    local msver_url=$(echo "$ms_info" | cut -d'|' -f3)
+                    if command -v download_and_parse_msver >/dev/null 2>&1; then
+                        local version_info=$(download_and_parse_msver "$msver_url" "ms" 2>/dev/null | grep "^version|" | head -1)
+                        if [ -n "$version_info" ]; then
+                            update_script_url=$(echo "$version_info" | cut -d'|' -f7)
+                        fi
+                    fi
+                fi
+            fi
+            
+            # Fallback if dynamic lookup fails
+            if [ -z "$update_script_url" ]; then
+                local raw_url="https://raw.githubusercontent.com/magic-scripts/ms/main"
+                update_script_url="$raw_url/installer/update.sh"
+            fi
+            
+            # Download upgrade script
             local temp_upgrade=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
             if command -v curl >/dev/null 2>&1; then
-                if curl -fsSL "https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh" -o "$temp_upgrade"; then
+                if curl -fsSL "$update_script_url" -o "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
                     exit 1
                 fi
             elif command -v wget >/dev/null 2>&1; then
-                if wget -q "https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh" -O "$temp_upgrade"; then
+                if wget -q "$update_script_url" -O "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
