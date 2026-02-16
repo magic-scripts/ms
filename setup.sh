@@ -392,7 +392,74 @@ echo "Installing Magic Scripts core system..."
         printf "${RED}failed${NC}\n"
         exit 1
     fi
-    
+
+    printf "  Downloading metadata.sh... "
+    if download_file "$RAW_URL/core/metadata.sh" "$MAGIC_DIR/core/metadata.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    printf "  Downloading version.sh... "
+    if download_file "$RAW_URL/core/version.sh" "$MAGIC_DIR/core/version.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    printf "  Downloading pack.sh... "
+    if download_file "$RAW_URL/core/pack.sh" "$MAGIC_DIR/core/pack.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    # Download lib modules
+    mkdir -p "$MAGIC_DIR/lib"
+
+    printf "  Downloading lib/install.sh... "
+    if download_file "$RAW_URL/lib/install.sh" "$MAGIC_DIR/lib/install.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    printf "  Downloading lib/uninstall.sh... "
+    if download_file "$RAW_URL/lib/uninstall.sh" "$MAGIC_DIR/lib/uninstall.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    printf "  Downloading lib/update.sh... "
+    if download_file "$RAW_URL/lib/update.sh" "$MAGIC_DIR/lib/update.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    printf "  Downloading lib/query.sh... "
+    if download_file "$RAW_URL/lib/query.sh" "$MAGIC_DIR/lib/query.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
+    printf "  Downloading lib/maintenance.sh... "
+    if download_file "$RAW_URL/lib/maintenance.sh" "$MAGIC_DIR/lib/maintenance.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
     # Registry system will be initialized automatically by ms.sh
     # No need to download registry files during installation
     
