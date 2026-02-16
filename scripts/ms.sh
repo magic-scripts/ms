@@ -21,7 +21,7 @@ cleanup_ms() {
 trap cleanup_ms EXIT INT TERM
 
 # Try to load libraries
-for lib in config.sh registry.sh; do
+for lib in config.sh registry.sh metadata.sh version.sh; do
     if [ -f "$MAGIC_SCRIPT_DIR/core/$lib" ]; then
         . "$MAGIC_SCRIPT_DIR/core/$lib"
     elif [ -f "$SCRIPT_DIR/../core/$lib" ]; then
@@ -1615,191 +1615,24 @@ handle_uninstall() {
 
 # Version management utilities
 # Get installation metadata
-get_installation_metadata() {
-    local cmd="$1"
-    local key="$2"  # Optional: specific key to get
-    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
-    
-    if [ ! -f "$meta_file" ]; then
-        [ -n "$key" ] && echo "unknown" || return 1
-        return 1
-    fi
-    
-    if [ -n "$key" ]; then
-        grep "^$key=" "$meta_file" 2>/dev/null | cut -d'=' -f2- || echo "unknown"
-    else
-        cat "$meta_file"
-    fi
-}
+# ============================================================================
+# Backward Compatibility Wrappers
+# These functions maintain the old API while delegating to the new modules
+# ============================================================================
 
-# Set installation metadata
-set_installation_metadata() {
-    local cmd="$1"
-    local version="$2"
-    local registry_name="$3"
-    local registry_url="$4"  
-    local checksum="$5"
-    local script_path="$6"
-    local install_script="$7"      # Optional: install script URL
-    local uninstall_script="$8"    # Optional: uninstall script URL
-    
-    local installed_dir="$HOME/.local/share/magicscripts/installed"
-    local meta_file="$installed_dir/$cmd.msmeta"
-    
-    mkdir -p "$installed_dir"
-    
-    # Create metadata file
-    cat > "$meta_file" << EOF
-command=$cmd
-version=$version
-registry_name=${registry_name:-unknown}
-registry_url=${registry_url:-unknown}
-checksum=${checksum:-unknown}
-installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
-script_path=${script_path:-unknown}
-install_script=${install_script:-}
-uninstall_script=${uninstall_script:-}
-EOF
-}
+# Metadata wrappers (delegate to metadata.sh)
+get_installation_metadata() { metadata_get "$@"; }
+set_installation_metadata() { metadata_set "$@"; }
+update_installation_metadata_key() { metadata_update_key "$@"; }
+remove_installation_metadata() { metadata_remove "$@"; }
 
-# Update a single key in installation metadata
-update_installation_metadata_key() {
-    local cmd="$1"
-    local key="$2"
-    local value="$3"
-    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
-
-    if [ ! -f "$meta_file" ]; then
-        ms_error "No metadata for '$cmd'" "Is it installed?"
-        return 1
-    fi
-
-    if grep -q "^${key}=" "$meta_file"; then
-        local tmp_file="${meta_file}.tmp"
-        grep -v "^${key}=" "$meta_file" > "$tmp_file"
-        echo "${key}=${value}" >> "$tmp_file"
-        mv "$tmp_file" "$meta_file"
-    else
-        echo "${key}=${value}" >> "$meta_file"
-    fi
-}
-
-# Remove installation metadata
-remove_installation_metadata() {
-    local cmd="$1"
-    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
-    [ -f "$meta_file" ] && rm "$meta_file"
-}
-
-# Get installed version (wrapper for backward compatibility)
-get_installed_version() {
-    local cmd="$1"
-    get_installation_metadata "$cmd" "version"
-}
-
-# Set installed version (wrapper for backward compatibility)  
-set_installed_version() {
-    local cmd="$1"
-    local version="$2"
-    
-    # Try to preserve existing metadata if available
-    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
-    if [ -f "$meta_file" ]; then
-        local registry_name=$(get_installation_metadata "$cmd" "registry_name")
-        local registry_url=$(get_installation_metadata "$cmd" "registry_url")
-        local checksum=$(get_installation_metadata "$cmd" "checksum")
-        local script_path=$(get_installation_metadata "$cmd" "script_path")
-        set_installation_metadata "$cmd" "$version" "$registry_name" "$registry_url" "$checksum" "$script_path"
-    else
-        set_installation_metadata "$cmd" "$version" "unknown" "unknown" "unknown" "unknown"
-    fi
-}
-
-# Calculate file checksum (same as msreg)
-calculate_file_checksum() {
-    local file_path="$1"
-    
-    if [ ! -f "$file_path" ]; then
-        echo "unknown"
-        return 1
-    fi
-    
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$file_path" | cut -d' ' -f1 | cut -c1-8
-    elif command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$file_path" | cut -d' ' -f1 | cut -c1-8
-    elif command -v openssl >/dev/null 2>&1; then
-        openssl dgst -sha256 "$file_path" | cut -d' ' -f2 | cut -c1-8
-    else
-        echo "unknown"
-        return 1
-    fi
-}
-
-# Verify installed command checksum
-verify_command_checksum() {
-    local cmd="$1"
-    local expected_checksum=$(get_installation_metadata "$cmd" "checksum")
-    local script_path=$(get_installation_metadata "$cmd" "script_path")
-    
-    if [ "$expected_checksum" = "unknown" ] || [ "$script_path" = "unknown" ]; then
-        return 2  # Cannot verify - no metadata
-    fi
-    
-    # Skip checksum verification for dev versions
-    if [ "$expected_checksum" = "dev" ]; then
-        echo "${BLUE}ℹ Checksum verification skipped (development resource)${NC}" >&2
-        return 5  # Dev version - no verification needed
-    fi
-    
-    if [ ! -f "$script_path" ]; then
-        return 3  # Script file not found
-    fi
-    
-    local actual_checksum=$(calculate_file_checksum "$script_path")
-    if [ "$actual_checksum" = "unknown" ]; then
-        return 4  # Cannot calculate checksum
-    fi
-    
-    if [ "$expected_checksum" = "$actual_checksum" ]; then
-        return 0  # Match
-    else
-        return 1  # Mismatch
-    fi
-}
-
-get_registry_version() {
-    local cmd="$1"
-    if command -v get_script_info >/dev/null 2>&1; then
-        local script_info=$(get_script_info "$cmd" 2>/dev/null)
-        if [ -n "$script_info" ]; then
-            # Extract version from script_info (format: command|cmd|uri|desc|category|version|checksum)
-            echo "$script_info" | cut -d'|' -f6
-        else
-            echo "unknown"
-        fi
-    else
-        echo "unknown"
-    fi
-}
-
-compare_versions() {
-    local installed="$1"
-    local registry="$2"
-    
-    # If either version is unknown, consider update needed
-    if [ "$installed" = "unknown" ] || [ "$registry" = "unknown" ]; then
-        echo "update_needed"
-        return
-    fi
-    
-    # Simple version comparison (assumes semantic versioning)
-    if [ "$installed" = "$registry" ]; then
-        echo "same"
-    else
-        echo "update_needed"
-    fi
-}
+# Version wrappers (delegate to version.sh)
+get_installed_version() { version_get_installed "$@"; }
+set_installed_version() { version_set_installed "$@"; }
+get_registry_version() { version_get_registry "$@"; }
+compare_versions() { version_compare "$@"; }
+calculate_file_checksum() { version_calculate_checksum "$@"; }
+verify_command_checksum() { version_verify_checksum "$@"; }
 
 handle_info() {
     local cmd="$1"
