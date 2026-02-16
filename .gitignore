@@ -101,6 +101,9 @@ chatgpt-session.json
 claude.json
 anthropic-session.json
 
+# Gemini files
+GEMINI.md
+
 # General AI assistant files
 *.ai-conversation
 *.ai-session

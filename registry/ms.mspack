@@ -1,0 +1,18 @@
+# ms.mspack - Package Manifest
+# Format: type|field1|field2|...
+
+# Package metadata
+name|ms
+description|Magic Scripts main CLI - install, manage, and run developer automation scripts
+author|Magic Scripts Team <team@magic-scripts.dev>
+license|MIT
+license_url|https://github.com/magic-scripts/ms/blob/main/LICENSE
+repo_url|https://github.com/magic-scripts/ms
+issues_url|https://github.com/magic-scripts/ms/issues
+stability|beta
+min_ms_version|0.0.1
+
+# Version file link
+msver_url|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msver
+
+# Configuration keys (none for ms core - configurations are managed by individual commands)

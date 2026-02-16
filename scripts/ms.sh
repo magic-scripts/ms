@@ -43,6 +43,15 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
+# Standardized error output helper
+# Usage: ms_error "message" ["hint"]
+ms_error() {
+    local message="$1"
+    local suggestion="$2"
+    echo "${RED}Error: $message${NC}" >&2
+    [ -n "$suggestion" ] && echo "  ${CYAN}Hint: $suggestion${NC}" >&2
+}
+
 # Format version for display
 format_version() {
     local version="$1"
@@ -71,14 +80,11 @@ show_help() {
     echo "  ${GREEN}help${NC}                    Show this help message"
     echo "  ${GREEN}version${NC}                 Show version information"
     echo "  ${GREEN}status${NC}                  Show installation status"
-    echo "  ${GREEN}doctor${NC}                  Diagnose and repair system issues"
     echo "  ${GREEN}search [query]${NC}          Search for available commands"
     echo "  ${GREEN}upgrade${NC}                 Update all registries to latest version"
     echo ""
     echo "${YELLOW}Configuration:${NC}"
     echo "  ${GREEN}config list${NC}             List all configuration values"
-    echo "  ${GREEN}config list -r [registry]${NC} Show available config keys (optionally filtered)"
-    echo "  ${GREEN}config list -c <command>${NC}  Show config keys for specific command"
     echo "  ${GREEN}config set <key> <value>${NC} Set a configuration value"
     echo "  ${GREEN}config get <key>${NC}        Get a configuration value"
     echo "  ${GREEN}config remove <key>${NC}     Remove a configuration value"
@@ -91,14 +97,25 @@ show_help() {
     echo "${YELLOW}Package Management:${NC}"
     echo "  ${GREEN}install <commands...>${NC}   Install specific commands (use cmd:version for versions)"
     echo "  ${GREEN}install -r <registry>${NC}   Install all commands from a registry"
-    echo "  ${GREEN}reinstall <commands...>${NC} Completely reinstall commands (remove + install)"
     echo "  ${GREEN}update${NC}                  Update all installed commands and Magic Scripts"
     echo "  ${GREEN}update <command>${NC}        Update specific command to latest version"
-    echo "  ${GREEN}update self${NC}             Update Magic Scripts itself only"
     echo "  ${GREEN}uninstall <commands...>${NC} Uninstall specific commands"
-    echo "  ${GREEN}versions <command>${NC}      Show available versions for a command"
+    echo "  ${GREEN}outdated${NC}                Show commands with available updates"
+    echo "  ${GREEN}which <command>${NC}         Show command file paths"
+    echo "  ${GREEN}pin <command>${NC}           Pin command to current version"
+    echo "  ${GREEN}unpin <command>${NC}         Unpin command"
+    echo "  ${GREEN}clean${NC}                   Clean cache and orphaned files"
+    echo "  ${GREEN}run <command> [args]${NC}    One-shot execution without installing"
     echo ""
-    
+    echo "${YELLOW}Data:${NC}"
+    echo "  ${GREEN}export [--full]${NC}         Export installed commands list"
+    echo "  ${GREEN}import <file>${NC}           Install commands from export file"
+    echo ""
+    echo "${YELLOW}Publisher Tools:${NC}"
+    echo "  ${GREEN}pub pack [cmd]${NC}          Package development and publishing"
+    echo "  ${GREEN}pub reg [cmd]${NC}           Registry file management"
+    echo ""
+
     # Show installed commands only
     INSTALL_DIR="$HOME/.local/bin/ms"
     echo "${YELLOW}Installed Magic Scripts:${NC}"
@@ -139,12 +156,12 @@ show_help() {
     echo "  ${CYAN}ms status${NC}                              # Check installation"
 }
 
-# Wrapper for backward compatibility - converts new 2-tier format to old format
+# Wrapper for backward compatibility - converts 3-tier registry format to old format
 get_script_info() {
     local cmd="$1"
     local version="$2"  # Optional
     
-    # Get command info using new 2-tier system
+    # Get command info using 3-tier registry system
     local cmd_info
     if command -v get_command_info >/dev/null 2>&1; then
         cmd_info=$(get_command_info "$cmd" "$version")
@@ -185,76 +202,54 @@ get_script_info() {
     return 1
 }
 
-# Helper for install functions - finds best version for a command
-find_best_version() {
-    local cmd="$1"
-    local requested_version="$2"  # Optional: specific version requested
-    local allow_dev="$3"          # Optional: allow dev versions
-    
-    if command -v get_command_versions >/dev/null 2>&1; then
-        local versions=$(get_command_versions "$cmd")
-        
-        if [ -z "$versions" ]; then
-            return 1
-        fi
-        
-        local best_version=""
-        local best_url=""
-        local best_checksum=""
-        local dev_version=""
-        local dev_url=""
-        local dev_checksum=""
-        
-        # Parse all available versions
-        echo "$versions" | while IFS='|' read -r prefix version url checksum; do
-            [ "$prefix" != "version" ] && continue
-            
-            # If specific version requested, match exactly
-            if [ -n "$requested_version" ]; then
-                if [ "$version" = "$requested_version" ]; then
-                    echo "$version|$url|$checksum"
-                    return 0
-                fi
-                continue
-            fi
-            
-            # Store dev version separately
-            if [ "$version" = "dev" ]; then
-                dev_version="$version"
-                dev_url="$url"
-                dev_checksum="$checksum"
-                if [ "$allow_dev" = "true" ]; then
-                    echo "$version|$url|$checksum"
-                    return 0
-                fi
-                continue
-            fi
-            
-            # Find highest semantic version (simplified - just use first non-dev for now)
-            if [ -z "$best_version" ]; then
-                best_version="$version"
-                best_url="$url"
-                best_checksum="$checksum"
-            fi
-        done
-        
-        # If we get here and no specific version was found, return best or dev fallback
-        if [ -n "$best_version" ]; then
-            echo "$best_version|$best_url|$best_checksum"
-            return 0
-        elif [ -n "$dev_version" ]; then
-            echo "$dev_version|$dev_url|$dev_checksum"
-            return 0
-        fi
+# Download and execute a remote hook script
+# Usage: execute_hook <hook_url> <arg1> <arg2> ...
+# Returns: 0 on success, 1 on failure
+execute_hook() {
+    local hook_url="$1"
+    shift
+
+    if [ -z "$hook_url" ] || [ "$hook_url" = "" ]; then
+        return 0
     fi
-    
-    return 1
+
+    local temp_hook=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local hook_success=false
+
+    if command -v download_file >/dev/null 2>&1; then
+        if download_file "$hook_url" "$temp_hook"; then
+            if sh "$temp_hook" "$@" < /dev/tty; then
+                hook_success=true
+            fi
+        fi
+    elif command -v curl >/dev/null 2>&1; then
+        if curl -fsSL "$hook_url" -o "$temp_hook"; then
+            if sh "$temp_hook" "$@" < /dev/tty; then
+                hook_success=true
+            fi
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -q "$hook_url" -O "$temp_hook"; then
+            if sh "$temp_hook" "$@" < /dev/tty; then
+                hook_success=true
+            fi
+        fi
+    else
+        echo "${RED}Error: curl or wget required for hook script${NC}" >&2
+    fi
+
+    rm -f "$temp_hook"
+
+    if [ "$hook_success" = true ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 suggest_similar_command() {
     local input="$1"
-    
-    # Common typos and patterns
+
     case "$input" in
         add|Add)
             echo "install"
@@ -268,7 +263,7 @@ suggest_similar_command() {
         find)
             echo "search"
             ;;
-        info|show)
+        show)
             echo "status"
             ;;
         fix|repair)
@@ -286,6 +281,39 @@ suggest_similar_command() {
         registry|repo)
             echo "reg"
             ;;
+        pack)
+            echo "pub"
+            ;;
+        publish|publisher)
+            echo "pub"
+            ;;
+        outdated|stale|old)
+            echo "outdated"
+            ;;
+        where|path|location)
+            echo "which"
+            ;;
+        lock|freeze)
+            echo "pin"
+            ;;
+        unlock|unfreeze)
+            echo "unpin"
+            ;;
+        sweep|purge|prune)
+            echo "clean"
+            ;;
+        scaffold|create|new|template)
+            echo "pub"
+            ;;
+        dump|backup)
+            echo "export"
+            ;;
+        restore|load)
+            echo "import"
+            ;;
+        exec|execute|try)
+            echo "run"
+            ;;
         ver|--version|-v)
             echo "version"
             ;;
@@ -293,17 +321,14 @@ suggest_similar_command() {
             echo "help"
             ;;
         *)
-            # Check for single character typos or similar patterns
-            for cmd in help version status doctor upgrade search install uninstall update versions reinstall config reg; do
-                # Check if input is a substring or close match
+            for cmd in help version status doctor upgrade search install uninstall update versions reinstall info config reg pub outdated which pin unpin clean export import run; do
                 case "$cmd" in
                     *"$input"*|"$input"*)
                         echo "$cmd"
                         return
                         ;;
                 esac
-                
-                # Check if they start with the same letter and are similar length
+
                 input_first=$(echo "$input" | cut -c1)
                 cmd_first=$(echo "$cmd" | cut -c1)
                 input_len=${#input}
@@ -312,7 +337,7 @@ suggest_similar_command() {
                 if [ $len_diff -lt 0 ]; then
                     len_diff=$((-len_diff))
                 fi
-                
+
                 if [ "$input_first" = "$cmd_first" ] && [ $len_diff -le 2 ]; then
                     echo "$cmd"
                     return
@@ -575,7 +600,7 @@ install_registry_all() {
     registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
     
     if [ -z "$registry_commands" ]; then
-        echo "${RED}Error: Registry '$registry_name' not found or empty${NC}"
+        ms_error "Registry '$registry_name' not found or empty" "Run 'ms reg list' to see available registries"
         return 1
     fi
     
@@ -595,7 +620,7 @@ install_registry_all() {
         
         printf "  Installing ${CYAN}%s${NC}... " "$cmd"
         
-        # Use get_command_info to get proper script URL from 2-tier system
+        # Use get_command_info to get proper script URL from registry system
         local full_cmd_info=$(get_command_info "$cmd" 2>/dev/null)
         local version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
         
@@ -642,11 +667,10 @@ install_registry_all() {
 
 # Install specific commands with duplicate detection
 install_commands_with_detection() {
-    local commands=("$@")
     local installed_count=0
     local failed_count=0
-    
-    for cmd in "${commands[@]}"; do
+
+    for cmd in "$@"; do
         # Parse command:version format
         local base_cmd="$cmd"
         local requested_version=""
@@ -658,63 +682,76 @@ install_commands_with_detection() {
                 requested_version=""
             fi
         fi
-        
+
         if [ "$base_cmd" = "ms" ]; then
             printf "  Installing ${CYAN}%s${NC}... " "$cmd"
             echo "${YELLOW}already installed${NC}"
             echo "  Use ${CYAN}ms reinstall ms${NC} to reinstall"
             continue
         fi
-        
-        # Find command in registries using 2-tier system
-        local found_registries=()
-        local registry_info=()
-        
+
+        # Find command in registries using registry system
+        # Use newline-separated strings instead of bash arrays
+        local found_registries=""
+        local registry_info=""
+
         if command -v get_registry_names >/dev/null 2>&1; then
             local registries_list=$(get_registry_names)
-            
+
             for registry_name in $registries_list; do
                 if command -v get_registry_commands >/dev/null 2>&1; then
                     local registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
-                    
-                    # In 2-tier system, just check if command exists by name in .msreg
+
+                    # In registry system, just check if command exists by name in .msreg
                     local cmd_info=$(echo "$registry_commands" | grep "^$base_cmd|" | head -1)
-                    
+
                     if [ -n "$cmd_info" ]; then
                         # Now check if requested version is available in .msver
                         local full_cmd_info=$(get_command_info "$base_cmd" "$requested_version" 2>/dev/null)
                         local version_info=""
-                        
+
                         if [ -n "$requested_version" ]; then
-                            # Look for specific version
                             version_info=$(echo "$full_cmd_info" | grep "^version|$requested_version|")
                         else
-                            # Look for best available version (non-dev first, then dev)
                             version_info=$(echo "$full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
                             if [ -z "$version_info" ]; then
                                 version_info=$(echo "$full_cmd_info" | grep "^version|dev|" | head -1)
                             fi
                         fi
-                        
-                        # Only add to found registries if version is available
+
                         if [ -n "$version_info" ]; then
-                            found_registries+=("$registry_name")
-                            # Create registry info with version information: command|name|msver_url|desc|category|version
+                            if [ -n "$found_registries" ]; then
+                                found_registries="$found_registries
+$registry_name"
+                            else
+                                found_registries="$registry_name"
+                            fi
                             local name=$(echo "$cmd_info" | cut -d'|' -f1)
                             local msver_url=$(echo "$cmd_info" | cut -d'|' -f2)
                             local desc=$(echo "$cmd_info" | cut -d'|' -f3)
                             local category=$(echo "$cmd_info" | cut -d'|' -f4)
                             local version=$(echo "$version_info" | cut -d'|' -f2)
-                            
-                            registry_info+=("command|$name|$msver_url|$desc|$category|$version")
+                            local info_line="command|$name|$msver_url|$desc|$category|$version"
+                            if [ -n "$registry_info" ]; then
+                                registry_info="$registry_info
+$info_line"
+                            else
+                                registry_info="$info_line"
+                            fi
                         fi
                     fi
                 fi
             done
         fi
-        
+
+        # Count found registries
+        local reg_count=0
+        if [ -n "$found_registries" ]; then
+            reg_count=$(echo "$found_registries" | wc -l | tr -d ' ')
+        fi
+
         # Handle installation based on what we found
-        if [ ${#found_registries[@]} -eq 0 ]; then
+        if [ "$reg_count" -eq 0 ]; then
             printf "  Installing ${CYAN}%s${NC}... " "$base_cmd"
             if [ -n "$requested_version" ]; then
                 echo "${RED}version $requested_version not found in any registry${NC}"
@@ -723,52 +760,47 @@ install_commands_with_detection() {
             fi
             failed_count=$((failed_count + 1))
             continue
-        elif [ ${#found_registries[@]} -eq 1 ]; then
-            # Single registry found
-            local target_registry="${found_registries[0]}"
-            local target_info="${registry_info[0]}"
+        elif [ "$reg_count" -eq 1 ]; then
+            local target_registry="$found_registries"
+            local target_info="$registry_info"
             local found_version=$(echo "$target_info" | cut -d'|' -f6)
-            
+
             printf "  Installing ${CYAN}%s${NC}" "$base_cmd"
             if [ -n "$requested_version" ] && [ "$requested_version" != "latest" ]; then
                 printf ":${CYAN}%s${NC}" "$requested_version"
-            elif [ "$found_version" != "" ]; then
+            elif [ -n "$found_version" ]; then
                 printf ":${CYAN}%s${NC}" "$found_version"
             fi
             printf " from ${YELLOW}%s${NC}... " "$target_registry"
-            
-            # Show warning if installing dev version without explicit request
+
             if [ "$found_version" = "dev" ] && [ -z "$requested_version" ]; then
                 echo ""
                 echo "    ${YELLOW}⚠️  Installing development version (no stable release available)${NC}"
                 printf "    "
             fi
-            
-            # Use get_command_info to get proper script URL from 2-tier system
+
             local full_cmd_info=$(get_command_info "$base_cmd" "$found_version" 2>/dev/null)
             local version_info=$(echo "$full_cmd_info" | grep "^version|$found_version|" | head -1)
-            
-            # If specific version not found, try any available version
+
             if [ -z "$version_info" ]; then
                 version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
             fi
-            
+
             local install_result
             if [ -n "$version_info" ]; then
-                # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|man_url
                 local script_url=$(echo "$version_info" | cut -d'|' -f3)
                 local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
                 local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
                 local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
                 local man_url=$(echo "$version_info" | cut -d'|' -f8)
-                
+
                 install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url"
                 install_result=$?
             else
                 echo "${RED}no version available${NC}"
                 install_result=1
             fi
-            
+
             case $install_result in
                 0)
                     echo "${GREEN}done${NC}"
@@ -786,59 +818,58 @@ install_commands_with_detection() {
             # Multiple registries found - show selection menu
             echo ""
             echo "${YELLOW}Command '$cmd' found in multiple registries:${NC}"
-            for i in $(seq 0 $((${#found_registries[@]} - 1))); do
-                echo "  $((i + 1))) ${found_registries[$i]}"
-            done
+            local menu_idx=1
+            while read -r _reg_name; do
+                echo "  $menu_idx) $_reg_name"
+                menu_idx=$((menu_idx + 1))
+            done <<EOF
+$found_registries
+EOF
             echo ""
-            printf "Choose registry (1-${#found_registries[@]}): "
+            printf "Choose registry (1-$reg_count): "
             read choice < /dev/tty
-            
-            if [ "$choice" -ge 1 ] && [ "$choice" -le ${#found_registries[@]} ]; then
-                local selected_index=$((choice - 1))
-                local target_registry="${found_registries[$selected_index]}"
-                local target_info="${registry_info[$selected_index]}"
+
+            if [ -n "$choice" ] && [ "$choice" -ge 1 ] 2>/dev/null && [ "$choice" -le "$reg_count" ] 2>/dev/null; then
+                local target_registry=$(echo "$found_registries" | sed -n "${choice}p")
+                local target_info=$(echo "$registry_info" | sed -n "${choice}p")
                 local found_version=$(echo "$target_info" | cut -d'|' -f6)
-                
+
                 printf "  Installing ${CYAN}%s${NC}" "$base_cmd"
                 if [ -n "$requested_version" ] && [ "$requested_version" != "latest" ]; then
                     printf ":${CYAN}%s${NC}" "$requested_version"
-                elif [ "$found_version" != "" ]; then
+                elif [ -n "$found_version" ]; then
                     printf ":${CYAN}%s${NC}" "$found_version"
                 fi
                 printf " from ${YELLOW}%s${NC}... " "$target_registry"
-                
-                # Show warning if installing dev version without explicit request
+
                 if [ "$found_version" = "dev" ] && [ -z "$requested_version" ]; then
                     echo ""
                     echo "    ${YELLOW}⚠️  Installing development version (no stable release available)${NC}"
                     printf "    "
                 fi
-                
-                # Use get_command_info to get proper script URL from 2-tier system
+
                 local full_cmd_info=$(get_command_info "$base_cmd" "$found_version" 2>/dev/null)
                 local version_info=$(echo "$full_cmd_info" | grep "^version|$found_version|" | head -1)
-                
-                # If specific version not found, try any available version
+
                 if [ -z "$version_info" ]; then
                     version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
                 fi
-                
+
                 local install_result
                 if [ -n "$version_info" ]; then
-                    # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|man_url|man_url
                     local script_url=$(echo "$version_info" | cut -d'|' -f3)
                     local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
                     local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                     local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                     local man_url=$(echo "$version_info" | cut -d'|' -f8)
-                    
+
                     install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
                     install_result=$?
                 else
                     echo "${RED}no version available${NC}"
                     install_result=1
                 fi
-                
+
                 case $install_result in
                     0)
                         echo "${GREEN}done${NC}"
@@ -858,7 +889,7 @@ install_commands_with_detection() {
             fi
         fi
     done
-    
+
     echo ""
     echo "Installation complete!"
     echo "Installed: ${GREEN}$installed_count${NC} commands"
@@ -869,13 +900,13 @@ handle_install() {
     echo "${YELLOW}Magic Scripts Installer${NC}"
     echo "===================="
     echo ""
-    
+
     INSTALL_DIR="$HOME/.local/bin/ms"
-    
-    # Parse options
+
+    # Parse options - collect commands as newline-separated string
     local specific_registry=""
-    local commands=()
-    
+    local commands=""
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -r|--registry)
@@ -903,59 +934,70 @@ handle_install() {
                 return 0
                 ;;
             *)
-                commands+=("$1")
+                if [ -n "$commands" ]; then
+                    commands="$commands
+$1"
+                else
+                    commands="$1"
+                fi
                 shift
                 ;;
         esac
     done
-    
+
+    # Count commands
+    local cmd_count=0
+    if [ -n "$commands" ]; then
+        cmd_count=$(echo "$commands" | wc -l | tr -d ' ')
+    fi
+
     # Create directories if needed
     [ ! -d "$INSTALL_DIR" ] && mkdir -p "$INSTALL_DIR"
     [ ! -d "$MAGIC_SCRIPT_DIR" ] && mkdir -p "$MAGIC_SCRIPT_DIR"
-    
+
     # Handle registry-only installation (no commands specified)
-    if [ -n "$specific_registry" ] && [ ${#commands[@]} -eq 0 ]; then
+    if [ -n "$specific_registry" ] && [ "$cmd_count" -eq 0 ]; then
         install_registry_all "$specific_registry"
         return $?
     fi
-    
+
     # Handle specific registry with commands
-    if [ -n "$specific_registry" ] && [ ${#commands[@]} -gt 0 ]; then
+    if [ -n "$specific_registry" ] && [ "$cmd_count" -gt 0 ]; then
         echo "Installing specified commands from '$specific_registry' registry..."
         echo ""
-        
+
         local installed_count=0
         local failed_count=0
-        
-        for cmd in "${commands[@]}"; do
+
+        while read -r cmd; do
             if [ "$cmd" = "ms" ]; then
                 printf "  Installing ${CYAN}%s${NC}... " "$cmd"
                 echo "${YELLOW}already installed${NC}"
                 echo "  Use ${CYAN}ms reinstall ms${NC} to reinstall"
                 continue
             fi
-            
-            # Get command from specific registry using 2-tier system
+
+            # Get command from specific registry using registry system
             if command -v get_command_info >/dev/null 2>&1; then
-                # Use get_command_info to properly handle 2-tier system
+                # Use get_command_info to properly handle registry system
                 local full_cmd_info=$(get_command_info "$cmd" 2>/dev/null)
-                
+
                 if [ -n "$full_cmd_info" ]; then
                     # Parse command metadata and version info from get_command_info output
                     local cmd_meta=$(echo "$full_cmd_info" | grep "^command_meta|")
                     local version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
-                    
+
                     if [ -n "$version_info" ]; then
                         printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"
-                        
-                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|man_url|man_url
+
+                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url
                         local script_url=$(echo "$version_info" | cut -d'|' -f3)
                         local version_name=$(echo "$version_info" | cut -d'|' -f2)
                         local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
                         local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                         local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                         local man_url=$(echo "$version_info" | cut -d'|' -f8)
-                        
+
                         local install_result
                         install_script "$cmd" "$script_url" "$specific_registry" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
                         install_result=$?
@@ -964,7 +1006,7 @@ handle_install() {
                         echo "${RED}no version available${NC}"
                         install_result=1
                     fi
-                    
+
                     case $install_result in
                         0)
                             echo "${GREEN}done${NC}"
@@ -987,7 +1029,9 @@ handle_install() {
                 echo "${RED}Error: Registry system not available${NC}"
                 return 1
             fi
-        done
+        done <<EOF
+$commands
+EOF
         
         echo ""
         echo "Installation complete!"
@@ -997,13 +1041,20 @@ handle_install() {
     fi
     
     # Handle commands without specific registry (search all registries)
-    if [ ${#commands[@]} -gt 0 ]; then
-        install_commands_with_detection "${commands[@]}"
-        return $?
+    if [ "$cmd_count" -gt 0 ]; then
+        # Pass each command as a separate argument
+        local _old_ifs="$IFS"
+        IFS='
+'
+        # shellcheck disable=SC2086
+        install_commands_with_detection $commands
+        local _ret=$?
+        IFS="$_old_ifs"
+        return $_ret
     fi
     
     # No commands specified - show help
-    echo "${RED}Error: No commands specified${NC}"
+    ms_error "No commands specified" "ms install <command1> [command2...]"
     echo "Usage: ${CYAN}ms install <command1> [command2...]${NC}"
     echo "   or: ${CYAN}ms install -r <registry>${NC}"
     echo ""
@@ -1090,33 +1141,41 @@ install_script() {
         mkdir -p "$(dirname "$target_script")"
         
         # Check if URI is remote or local
-        if [[ "$script_uri" =~ ^https?:// ]]; then
-            # Remote URI - download it
-            if command -v curl >/dev/null 2>&1; then
-                if ! curl -fsSL "$script_uri" -o "$target_script" 2>/dev/null; then
-                    echo "Error: Failed to download script from $script_uri" >&2
+        case "$script_uri" in
+            http://*|https://*)
+                # Remote URI - download with security validation
+                if command -v download_file >/dev/null 2>&1; then
+                    if ! download_file "$script_uri" "$target_script"; then
+                        echo "Error: Failed to download script from $script_uri" >&2
+                        return 1
+                    fi
+                elif command -v curl >/dev/null 2>&1; then
+                    if ! curl -fsSL "$script_uri" -o "$target_script" 2>/dev/null; then
+                        echo "Error: Failed to download script from $script_uri" >&2
+                        return 1
+                    fi
+                elif command -v wget >/dev/null 2>&1; then
+                    if ! wget -q "$script_uri" -O "$target_script" 2>/dev/null; then
+                        echo "Error: Failed to download script from $script_uri" >&2
+                        return 1
+                    fi
+                else
+                    echo "Error: curl or wget required for downloading" >&2
                     return 1
                 fi
-            elif command -v wget >/dev/null 2>&1; then
-                if ! wget -q "$script_uri" -O "$target_script" 2>/dev/null; then
-                    echo "Error: Failed to download script from $script_uri" >&2
-                    return 1
-                fi
-            else
-                echo "Error: curl or wget required for downloading" >&2
-                return 1
-            fi
-            chmod 755 "$target_script"
-        else
-            # Local path - copy it
-            if [ -f "$script_uri" ]; then
-                cp "$script_uri" "$target_script"
                 chmod 755 "$target_script"
-            else
-                echo "Error: Local script not found: $script_uri" >&2
-                return 1
-            fi
-        fi
+                ;;
+            *)
+                # Local path - copy it
+                if [ -f "$script_uri" ]; then
+                    cp "$script_uri" "$target_script"
+                    chmod 755 "$target_script"
+                else
+                    echo "Error: Local script not found: $script_uri" >&2
+                    return 1
+                fi
+                ;;
+        esac
     fi
     
     # Verify script exists
@@ -1143,23 +1202,32 @@ EOF
         
         # Download man page
         local man_download_success=false
-        if [[ "$man_url" =~ ^https?:// ]]; then
-            # Remote URL - download it
-            if command -v curl >/dev/null 2>&1; then
-                if curl -fsSL "$man_url" -o "$man_file" 2>/dev/null; then
-                    man_download_success=true
+        case "$man_url" in
+            http://*|https://*)
+                # Remote URL - download with security validation
+                if command -v download_file >/dev/null 2>&1; then
+                    if download_file "$man_url" "$man_file"; then
+                        man_download_success=true
+                    fi
+                elif command -v curl >/dev/null 2>&1; then
+                    if curl -fsSL "$man_url" -o "$man_file" 2>/dev/null; then
+                        man_download_success=true
+                    fi
+                elif command -v wget >/dev/null 2>&1; then
+                    if wget -q "$man_url" -O "$man_file" 2>/dev/null; then
+                        man_download_success=true
+                    fi
                 fi
-            elif command -v wget >/dev/null 2>&1; then
-                if wget -q "$man_url" -O "$man_file" 2>/dev/null; then
-                    man_download_success=true
+                ;;
+            *)
+                # Local file - copy it
+                if [ -f "$man_url" ]; then
+                    if cp "$man_url" "$man_file" 2>/dev/null; then
+                        man_download_success=true
+                    fi
                 fi
-            fi
-        elif [ -f "$man_url" ]; then
-            # Local file - copy it
-            if cp "$man_url" "$man_file" 2>/dev/null; then
-                man_download_success=true
-            fi
-        fi
+                ;;
+        esac
         
         if [ "$man_download_success" = true ]; then
             echo "  ${GREEN}Installed${NC}: $cmd man page"
@@ -1210,37 +1278,12 @@ EOF
     if [ -n "$install_hook_script" ] && [ "$install_hook_script" != "" ]; then
         echo "  ${CYAN}Running install script for $cmd...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-        
-        # Download install script to temp file and execute with proper stdin
-        local temp_install_script=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-        local install_success=false
-        
-        # Download the install script
-        if command -v curl >/dev/null 2>&1; then
-            if curl -fsSL "$install_hook_script" -o "$temp_install_script"; then
-                if sh "$temp_install_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                    install_success=true
-                fi
-            fi
-        elif command -v wget >/dev/null 2>&1; then
-            if wget -q "$install_hook_script" -O "$temp_install_script"; then
-                if sh "$temp_install_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                    install_success=true
-                fi
-            fi
-        else
-            echo "${RED}Error: curl or wget required for install script${NC}" >&2
-        fi
-        
-        # Clean up temp file
-        rm -f "$temp_install_script"
-        
-        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-        if [ "$install_success" = true ]; then
+        if execute_hook "$install_hook_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
             echo "  ${GREEN}Install script completed successfully${NC}"
         else
             echo "${YELLOW}Warning: Install script failed for $cmd, proceeding with installation${NC}" >&2
         fi
+        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
     fi
     
     # Record comprehensive installation metadata
@@ -1273,38 +1316,13 @@ EOF
     if [ "$is_update" = true ] && [ -n "$update_hook_script" ] && [ "$update_hook_script" != "" ]; then
         echo "  ${CYAN}Running update script for $cmd ($(format_version "$old_version") → $(format_version "$target_version"))...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-        
-        # Download update script to temp file and execute
-        local temp_update_script=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-        local update_success=false
-        
-        # Download the update script
-        if command -v curl >/dev/null 2>&1; then
-            if curl -fsSL "$update_hook_script" -o "$temp_update_script"; then
-                if sh "$temp_update_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                    update_success=true
-                fi
-            fi
-        elif command -v wget >/dev/null 2>&1; then
-            if wget -q "$update_hook_script" -O "$temp_update_script"; then
-                if sh "$temp_update_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                    update_success=true
-                fi
-            fi
-        else
-            echo "${RED}Error: curl or wget required for update script${NC}" >&2
-        fi
-        
-        # Clean up temp file
-        rm -f "$temp_update_script"
-        
-        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-        if [ "$update_success" = true ]; then
+        if execute_hook "$update_hook_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
             echo "  ${GREEN}Update script completed successfully${NC}"
         else
             echo "${YELLOW}Warning: Update script failed for $cmd${NC}" >&2
             echo "  ${YELLOW}Installation completed but update tasks may not have been performed${NC}" >&2
         fi
+        echo "  ${YELLOW}═══════════════════════════════════════${NC}"
     fi
     
     return 0
@@ -1526,55 +1544,26 @@ handle_uninstall() {
             # Execute uninstall script if exists
             local uninstall_script_url=$(get_installation_metadata "$cmd" "uninstall_script")
             if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
-                echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
-                echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                
-                # Download uninstall script to temp file and execute with proper stdin
-                local temp_uninstall_script=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-                local uninstall_success=false
                 local version=$(get_installation_metadata "$cmd" "version")
                 local script_path=$(get_installation_metadata "$cmd" "script_path")
                 local registry_name=$(get_installation_metadata "$cmd" "registry_name")
-                
-                # Download the uninstall script
-                if command -v curl >/dev/null 2>&1; then
-                    if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall_script"; then
-                        if sh "$temp_uninstall_script" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                            uninstall_success=true
-                        fi
-                    fi
-                elif command -v wget >/dev/null 2>&1; then
-                    if wget -q "$uninstall_script_url" -O "$temp_uninstall_script"; then
-                        if sh "$temp_uninstall_script" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name" < /dev/tty; then
-                            uninstall_success=true
-                        fi
-                    fi
-                else
-                    echo "${RED}Error: curl or wget required for uninstall script${NC}" >&2
-                fi
-                
-                # Clean up temp file
-                rm -f "$temp_uninstall_script"
-                
+
+                echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
                 echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                if [ "$uninstall_success" = true ]; then
+                if execute_hook "$uninstall_script_url" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name"; then
                     echo "  ${GREEN}Uninstall script completed successfully${NC}"
-                    # If we successfully uninstalled ms core, exit completely (unless this is part of reinstall)
                     if [ "$cmd" = "ms" ] && [ "${MS_REINSTALL_MODE:-}" != "true" ]; then
                         echo "  ${GREEN}Magic Scripts has been completely removed.${NC}"
                         exit 0
                     fi
                 else
                     echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
-                    # If ms uninstall script failed, try direct removal as fallback
                     if [ "$cmd" = "ms" ]; then
                         echo "  ${YELLOW}Attempting direct removal as fallback...${NC}"
-                        # Direct removal of ms core files
                         if [ -f "$INSTALL_DIR/ms" ]; then
                             rm -f "$INSTALL_DIR/ms"
                             echo "  ${GREEN}Removed${NC}: ms command"
                         fi
-                        # Remove core data
                         if [ -d "$HOME/.local/share/magicscripts" ]; then
                             rm -rf "$HOME/.local/share/magicscripts"
                             echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
@@ -1583,6 +1572,7 @@ handle_uninstall() {
                         exit 0
                     fi
                 fi
+                echo "  ${YELLOW}═══════════════════════════════════════${NC}"
             fi
             
             # Handle non-ms commands cleanup
@@ -1621,60 +1611,6 @@ handle_uninstall() {
     
     echo ""
     echo "Removed ${GREEN}$removed_count${NC} commands"
-}
-
-doctor_check() {
-    echo "${YELLOW}Magic Scripts Doctor${NC}"
-    echo "=================="
-    echo ""
-    echo "${BLUE}Running system diagnostics...${NC}"
-    echo ""
-    
-    local issues_found=0
-    
-    # Check directories
-    echo "${CYAN}Checking directories:${NC}"
-    for dir in "$HOME/.local/bin/ms" "$MAGIC_SCRIPT_DIR"; do
-        if [ -d "$dir" ]; then
-            echo "  ${GREEN}✓${NC} $dir"
-        else
-            echo "  ${RED}✗${NC} $dir (creating...)"
-            if mkdir -p "$dir" 2>/dev/null; then
-                echo "    ${GREEN}✓${NC} Created successfully"
-            else
-                echo "    ${RED}✗${NC} Failed to create"
-                issues_found=$((issues_found + 1))
-            fi
-        fi
-    done
-    
-    echo ""
-    echo "${CYAN}Checking dependencies:${NC}"
-    for dep in curl wget git; do
-        if command -v "$dep" >/dev/null 2>&1; then
-            echo "  ${GREEN}✓${NC} $dep"
-        else
-            echo "  ${RED}✗${NC} $dep (recommended)"
-        fi
-    done
-    
-    echo ""
-    echo "${CYAN}Checking PATH:${NC}"
-    if echo "$PATH" | grep -q "$HOME/.local/bin/ms"; then
-        echo "  ${GREEN}✓${NC} $HOME/.local/bin/ms is in PATH"
-    else
-        echo "  ${RED}✗${NC} $HOME/.local/bin/ms is NOT in PATH"
-        echo "    Add this to your shell config:"
-        echo "    ${CYAN}export PATH=\"$HOME/.local/bin/ms:\$PATH\"${NC}"
-        issues_found=$((issues_found + 1))
-    fi
-    
-    echo ""
-    if [ $issues_found -eq 0 ]; then
-        echo "${GREEN}✅ All systems operational!${NC}"
-    else
-        echo "${YELLOW}⚠️  Found $issues_found issue(s) that need attention${NC}"
-    fi
 }
 
 # Version management utilities
@@ -1724,6 +1660,28 @@ script_path=${script_path:-unknown}
 install_script=${install_script:-}
 uninstall_script=${uninstall_script:-}
 EOF
+}
+
+# Update a single key in installation metadata
+update_installation_metadata_key() {
+    local cmd="$1"
+    local key="$2"
+    local value="$3"
+    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
+
+    if [ ! -f "$meta_file" ]; then
+        ms_error "No metadata for '$cmd'" "Is it installed?"
+        return 1
+    fi
+
+    if grep -q "^${key}=" "$meta_file"; then
+        local tmp_file="${meta_file}.tmp"
+        grep -v "^${key}=" "$meta_file" > "$tmp_file"
+        echo "${key}=${value}" >> "$tmp_file"
+        mv "$tmp_file" "$meta_file"
+    else
+        echo "${key}=${value}" >> "$meta_file"
+    fi
 }
 
 # Remove installation metadata
@@ -1843,9 +1801,320 @@ compare_versions() {
     fi
 }
 
+handle_info() {
+    local cmd="$1"
+
+    if [ -z "$cmd" ]; then
+        ms_error "No command specified" "ms info <command>"
+        return 1
+    fi
+
+    if ! command -v get_command_info >/dev/null 2>&1; then
+        ms_error "Registry system not available" "Run 'ms upgrade' to update registries"
+        return 1
+    fi
+
+    local full_info
+    full_info=$(get_command_info "$cmd" 2>/dev/null)
+
+    if [ -z "$full_info" ]; then
+        echo "${RED}Command '$cmd' not found in any registry${NC}"
+        return 1
+    fi
+
+    local cmd_meta
+    cmd_meta=$(echo "$full_info" | grep "^command_meta|" | head -1)
+    local reg_description
+    reg_description=$(echo "$cmd_meta" | cut -d'|' -f3)
+    local reg_category
+    reg_category=$(echo "$cmd_meta" | cut -d'|' -f4)
+
+    echo ""
+    echo "${BLUE}═══════════════════════════════════════════${NC}"
+    echo "${BLUE}  $cmd${NC}"
+    echo "${BLUE}═══════════════════════════════════════════${NC}"
+    echo ""
+
+    echo "  ${CYAN}Description:${NC}  $reg_description"
+    echo "  ${CYAN}Category:${NC}     $reg_category"
+
+    # Show metadata from mspack if available
+    local metadata
+    metadata=$(echo "$full_info" | grep "^meta|")
+    if [ -n "$metadata" ]; then
+        local author license stab repo_url issues min_ms
+        author=$(echo "$metadata" | grep "^meta|author|" | head -1 | cut -d'|' -f3)
+        license=$(echo "$metadata" | grep "^meta|license|" | head -1 | cut -d'|' -f3)
+        stab=$(echo "$metadata" | grep "^meta|stability|" | head -1 | cut -d'|' -f3)
+        repo_url=$(echo "$metadata" | grep "^meta|repo_url|" | head -1 | cut -d'|' -f3)
+        issues=$(echo "$metadata" | grep "^meta|issues_url|" | head -1 | cut -d'|' -f3)
+        min_ms=$(echo "$metadata" | grep "^meta|min_ms_version|" | head -1 | cut -d'|' -f3)
+
+        [ -n "$author" ] && echo "  ${CYAN}Author:${NC}       $author"
+        [ -n "$license" ] && echo "  ${CYAN}License:${NC}      $license"
+        [ -n "$stab" ] && echo "  ${CYAN}Stability:${NC}    $stab"
+        [ -n "$repo_url" ] && echo "  ${CYAN}Repository:${NC}  $repo_url"
+        [ -n "$issues" ] && echo "  ${CYAN}Issues:${NC}       $issues"
+        [ -n "$min_ms" ] && echo "  ${CYAN}Min ms ver:${NC}  $min_ms"
+    fi
+
+    # Show versions
+    local versions
+    versions=$(echo "$full_info" | grep "^version|")
+    if [ -n "$versions" ]; then
+        local installed_version
+        installed_version=$(get_installed_version "$cmd" 2>/dev/null)
+        echo ""
+        echo "  ${CYAN}Versions:${NC}"
+        echo "$versions" | while IFS='|' read -r _prefix ver _url _checksum _rest; do
+            if [ "$ver" = "$installed_version" ]; then
+                echo "    ${GREEN}$ver (installed)${NC}"
+            else
+                echo "    $ver"
+            fi
+        done
+    fi
+
+    # Show config keys
+    local configs
+    configs=$(echo "$full_info" | grep "^config|")
+    if [ -n "$configs" ]; then
+        echo ""
+        echo "  ${CYAN}Configuration keys:${NC}"
+        echo "$configs" | while IFS='|' read -r _prefix cfg_key cfg_default cfg_desc _rest; do
+            printf "    %-25s %s" "$cfg_key" "$cfg_desc"
+            [ -n "$cfg_default" ] && printf " (default: %s)" "$cfg_default"
+            echo ""
+        done
+    fi
+
+    echo ""
+}
+
+handle_which() {
+    local cmd="$1"
+
+    if [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || [ "$cmd" = "help" ]; then
+        echo "${YELLOW}Show file paths for an installed command${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms which <command>${NC}"
+        echo ""
+        echo "${YELLOW}Shows:${NC}"
+        echo "  Wrapper script, main script, metadata, and man page paths"
+        return 0
+    fi
+
+    if [ -z "$cmd" ]; then
+        ms_error "No command specified" "ms which <command>"
+        return 1
+    fi
+
+    local wrapper="$HOME/.local/bin/ms/$cmd"
+    local script="$HOME/.local/share/magicscripts/scripts/${cmd}.sh"
+    local meta="$HOME/.local/share/magicscripts/installed/${cmd}.msmeta"
+    local man_file="$HOME/.local/share/magicscripts/man/${cmd}.1"
+
+    if [ ! -f "$wrapper" ] && [ ! -f "$meta" ]; then
+        ms_error "'$cmd' is not installed" "Run 'ms install $cmd' to install it"
+        return 1
+    fi
+
+    echo ""
+    echo "${CYAN}$cmd${NC}"
+    echo ""
+
+    if [ -f "$wrapper" ]; then
+        echo "  ${GREEN}Wrapper:${NC}   $wrapper"
+    else
+        echo "  ${YELLOW}Wrapper:${NC}   (not found)"
+    fi
+
+    if [ -f "$script" ]; then
+        echo "  ${GREEN}Script:${NC}    $script"
+    else
+        echo "  ${YELLOW}Script:${NC}    (not found)"
+    fi
+
+    if [ -f "$meta" ]; then
+        echo "  ${GREEN}Metadata:${NC}  $meta"
+        local ver=$(get_installation_metadata "$cmd" "version")
+        local pinned=$(get_installation_metadata "$cmd" "pinned")
+        [ -n "$ver" ] && [ "$ver" != "unknown" ] && echo "  ${GREEN}Version:${NC}   $(format_version "$ver")"
+        [ "$pinned" = "true" ] && echo "  ${YELLOW}Pinned:${NC}    yes"
+    else
+        echo "  ${YELLOW}Metadata:${NC}  (not found)"
+    fi
+
+    if [ -f "$man_file" ]; then
+        echo "  ${GREEN}Man page:${NC}  $man_file"
+    fi
+
+    echo ""
+}
+
+handle_outdated() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Check for outdated installed commands${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms outdated${NC}"
+        echo ""
+        echo "${YELLOW}Shows:${NC}"
+        echo "  Installed commands with newer versions available in registries"
+        echo "  Pinned commands are marked but skipped during updates"
+        return 0
+    fi
+
+    if ! command -v get_all_commands >/dev/null 2>&1; then
+        ms_error "Registry system not available" "Run 'ms upgrade' to update registries"
+        return 1
+    fi
+
+    local ms_install_dir="$HOME/.local/bin/ms"
+    local installed_commands=""
+
+    if [ -d "$ms_install_dir" ]; then
+        for cmd_file in "$ms_install_dir"/*; do
+            if [ -f "$cmd_file" ] && [ -x "$cmd_file" ]; then
+                local cmd_name=$(basename "$cmd_file")
+                if [ "$cmd_name" != "ms" ]; then
+                    installed_commands="$installed_commands $cmd_name"
+                fi
+            fi
+        done
+    fi
+
+    if [ -z "$installed_commands" ]; then
+        echo "${YELLOW}No Magic Scripts commands installed.${NC}"
+        return 0
+    fi
+
+    echo "${YELLOW}Checking for updates...${NC}"
+    echo ""
+
+    local outdated_count=0
+    local pinned_count=0
+    local up_to_date_count=0
+
+    for cmd in $installed_commands; do
+        local installed_version=$(get_installed_version "$cmd")
+        local registry_version=$(get_registry_version "$cmd")
+
+        if [ "$registry_version" = "unknown" ]; then
+            continue
+        fi
+
+        local comparison=$(compare_versions "$installed_version" "$registry_version")
+        local is_pinned=$(get_installation_metadata "$cmd" "pinned")
+
+        if [ "$comparison" = "update_needed" ]; then
+            if [ "$is_pinned" = "true" ]; then
+                printf "  ${CYAN}%-20s${NC} ${YELLOW}%-10s → %-10s${NC} ${YELLOW}(pinned)${NC}\n" "$cmd" "$(format_version "$installed_version")" "$(format_version "$registry_version")"
+                pinned_count=$((pinned_count + 1))
+            else
+                printf "  ${CYAN}%-20s${NC} ${RED}%-10s${NC} → ${GREEN}%-10s${NC}\n" "$cmd" "$(format_version "$installed_version")" "$(format_version "$registry_version")"
+            fi
+            outdated_count=$((outdated_count + 1))
+        else
+            up_to_date_count=$((up_to_date_count + 1))
+        fi
+    done
+
+    echo ""
+    if [ $outdated_count -eq 0 ]; then
+        echo "${GREEN}All commands are up to date.${NC}"
+    else
+        echo "$outdated_count command(s) can be updated."
+        [ $pinned_count -gt 0 ] && echo "$pinned_count command(s) are pinned (use 'ms unpin <cmd>' to allow updates)."
+        echo "Run '${CYAN}ms update${NC}' to update all."
+    fi
+}
+
+handle_pin() {
+    local cmd="$1"
+
+    if [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || [ "$cmd" = "help" ]; then
+        echo "${YELLOW}Pin a command to its current version${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms pin <command>${NC}"
+        echo ""
+        echo "Pinned commands are skipped during ${CYAN}ms update${NC}."
+        echo "Use ${CYAN}ms unpin <command>${NC} to remove the pin."
+        return 0
+    fi
+
+    if [ -z "$cmd" ]; then
+        ms_error "No command specified" "ms pin <command>"
+        return 1
+    fi
+
+    local wrapper="$HOME/.local/bin/ms/$cmd"
+    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
+
+    if [ ! -f "$wrapper" ] && [ ! -f "$meta_file" ]; then
+        ms_error "'$cmd' is not installed" "Run 'ms install $cmd' first"
+        return 1
+    fi
+
+    local already_pinned=$(get_installation_metadata "$cmd" "pinned")
+    if [ "$already_pinned" = "true" ]; then
+        local ver=$(get_installed_version "$cmd")
+        echo "${YELLOW}'$cmd' is already pinned at $(format_version "$ver")${NC}"
+        return 0
+    fi
+
+    update_installation_metadata_key "$cmd" "pinned" "true" || return 1
+
+    local ver=$(get_installed_version "$cmd")
+    echo "${GREEN}Pinned '$cmd' at $(format_version "$ver")${NC}"
+    echo "  ${CYAN}Hint:${NC} This command will be skipped during 'ms update'"
+}
+
+handle_unpin() {
+    local cmd="$1"
+
+    if [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || [ "$cmd" = "help" ]; then
+        echo "${YELLOW}Unpin a command to allow updates${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms unpin <command>${NC}"
+        echo ""
+        echo "Removes the version pin so the command can be updated again."
+        return 0
+    fi
+
+    if [ -z "$cmd" ]; then
+        ms_error "No command specified" "ms unpin <command>"
+        return 1
+    fi
+
+    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
+
+    if [ ! -f "$meta_file" ]; then
+        ms_error "'$cmd' is not installed" "Run 'ms install $cmd' first"
+        return 1
+    fi
+
+    local is_pinned=$(get_installation_metadata "$cmd" "pinned")
+    if [ "$is_pinned" != "true" ]; then
+        echo "${YELLOW}'$cmd' is not pinned${NC}"
+        return 0
+    fi
+
+    # Remove pinned key by writing empty value
+    local tmp_file="${meta_file}.tmp"
+    grep -v "^pinned=" "$meta_file" > "$tmp_file"
+    mv "$tmp_file" "$meta_file"
+
+    echo "${GREEN}Unpinned '$cmd'${NC}"
+    echo "  ${CYAN}Hint:${NC} This command will now be updated with 'ms update'"
+}
+
 handle_versions() {
     if [ $# -eq 0 ]; then
-        echo "${RED}Error: No command specified${NC}"
+        ms_error "No command specified" "ms versions <command>"
         echo "Usage: ms versions <command>"
         echo "       ms versions --all         # Show versions for all commands"
         echo "       ms versions -r <registry> # Show versions for all commands in registry"
@@ -1866,9 +2135,9 @@ handle_versions() {
         if command -v get_registry_commands >/dev/null 2>&1; then
             local registry_commands=$(get_registry_commands "$registry_name" 2>/dev/null)
             if [ -n "$registry_commands" ]; then
-                echo "$registry_commands" | while IFS='|' read -r prefix cmd msver_url desc category; do
+                echo "$registry_commands" | while IFS='|' read -r cmd msver_url desc category; do
                     [ -z "$cmd" ] || [ -z "$msver_url" ] && continue
-                    
+
                     echo "${CYAN}$cmd${NC} - $desc"
                     if command -v download_and_parse_msver >/dev/null 2>&1; then
                         local versions=$(download_and_parse_msver "$msver_url" "$cmd" 2>/dev/null | grep "^version|")
@@ -1932,7 +2201,7 @@ handle_versions() {
     echo "  Latest:    $registry_version"
     echo ""
     
-    # Show all available versions from 2-tier system
+    # Show all available versions from registry system
     if command -v get_command_versions >/dev/null 2>&1; then
         local all_versions=$(get_command_versions "$cmd" 2>/dev/null)
         if [ -n "$all_versions" ]; then
@@ -1957,192 +2226,7 @@ handle_versions() {
     fi
 }
 
-handle_reinstall() {
-    if [ $# -eq 0 ]; then
-        echo "${RED}Error: No command specified${NC}"
-        echo "Usage: ${CYAN}ms reinstall <command1> [command2...]${NC}"
-        echo ""
-        echo "Examples:"
-        echo "  ${CYAN}ms reinstall gigen${NC}           # Reinstall gigen command"
-        echo "  ${CYAN}ms reinstall ms${NC}              # Reinstall Magic Scripts itself" 
-        echo "  ${CYAN}ms reinstall gigen pgadduser${NC}  # Reinstall multiple commands"
-        exit 1
-    fi
-    
-    echo "${YELLOW}Magic Scripts Reinstaller${NC}"
-    echo "========================="
-    echo ""
-    
-    local reinstall_count=0
-    local failed_count=0
-    
-    for cmd in "$@"; do
-        # Parse command:version format
-        local base_cmd="$cmd"
-        local requested_version=""
-        if echo "$cmd" | grep -q ':'; then
-            base_cmd=$(echo "$cmd" | cut -d':' -f1)
-            requested_version=$(echo "$cmd" | cut -d':' -f2)
-        fi
-        
-        # Special handling for ms itself
-        if [ "$base_cmd" = "ms" ]; then
-            # handle_ms_force_reinstall shows its own messages
-            if handle_ms_force_reinstall; then
-                reinstall_count=$((reinstall_count + 1))
-            else
-                failed_count=$((failed_count + 1))
-            fi
-            continue
-        fi
-        
-        printf "  Reinstalling ${CYAN}%s${NC}... " "$cmd"
-        
-        # Set reinstall mode for ms to prevent early exit
-        if [ "$base_cmd" = "ms" ]; then
-            export MS_REINSTALL_MODE=true
-        fi
-        
-        # First, execute uninstall script if exists (before removing files)
-        local INSTALL_DIR="$HOME/.local/bin/ms"
-        if [ -f "$INSTALL_DIR/$base_cmd" ]; then
-            local uninstall_script_url=$(get_installation_metadata "$base_cmd" "uninstall_script")
-            if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
-                echo ""
-                echo "    ${CYAN}Running uninstall script for $base_cmd...${NC}"
-                echo "    ${YELLOW}═══════════════════════════════════════${NC}"
-                
-                # Download uninstall script to temp file and execute with proper stdin
-                local temp_uninstall_script=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-                local uninstall_success=false
-                local old_version=$(get_installation_metadata "$base_cmd" "version")
-                local script_path=$(get_installation_metadata "$base_cmd" "script_path")
-                local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
-                
-                # Download the uninstall script
-                if command -v curl >/dev/null 2>&1; then
-                    if curl -fsSL "$uninstall_script_url" -o "$temp_uninstall_script"; then
-                        if sh "$temp_uninstall_script" "$base_cmd" "$old_version" "$script_path" "$INSTALL_DIR/$base_cmd" "$registry_name" < /dev/tty; then
-                            uninstall_success=true
-                        fi
-                    fi
-                elif command -v wget >/dev/null 2>&1; then
-                    if wget -q "$uninstall_script_url" -O "$temp_uninstall_script"; then
-                        if sh "$temp_uninstall_script" "$base_cmd" "$old_version" "$script_path" "$INSTALL_DIR/$base_cmd" "$registry_name" < /dev/tty; then
-                            uninstall_success=true
-                        fi
-                    fi
-                else
-                    echo "${RED}Error: curl or wget required for uninstall script${NC}" >&2
-                fi
-                
-                # Clean up temp file
-                rm -f "$temp_uninstall_script"
-                
-                echo "    ${YELLOW}═══════════════════════════════════════${NC}"
-                if [ "$uninstall_success" = true ]; then
-                    echo "    ${GREEN}Uninstall script completed successfully${NC}"
-                else
-                    echo "    ${YELLOW}Warning: Uninstall script failed, proceeding with reinstall${NC}" >&2
-                fi
-                printf "  Continuing reinstallation of ${CYAN}%s${NC}... " "$cmd"
-            fi
-            
-            rm -f "$INSTALL_DIR/$base_cmd"
-        fi
-        
-        # Remove metadata
-        remove_installation_metadata "$base_cmd"
-        
-        # Remove script file if exists
-        if command -v get_script_info >/dev/null 2>&1; then
-            local script_info=$(get_script_info "$base_cmd" "$requested_version" 2>/dev/null)
-            if [ -n "$script_info" ]; then
-                local script_uri=$(echo "$script_info" | cut -d'|' -f3)
-                local script_filename=$(basename "$script_uri")
-                local script_path="$HOME/.local/share/magicscripts/scripts/$script_filename"
-                if [ -f "$script_path" ]; then
-                    rm -f "$script_path"
-                fi
-            fi
-        fi
-        
-        # Now reinstall using the install logic
-        if command -v get_command_info >/dev/null 2>&1; then
-            # If no version specified, use currently installed version
-            if [ -z "$requested_version" ]; then
-                requested_version=$(get_installed_version "$base_cmd")
-                if [ "$requested_version" = "unknown" ] || [ -z "$requested_version" ]; then
-                    # If can't determine current version, use latest
-                    requested_version=""
-                fi
-            fi
-            
-            # Use get_command_info for 2-tier system support
-            local full_cmd_info=$(get_command_info "$base_cmd" "$requested_version" 2>/dev/null)
-            
-            if [ -n "$full_cmd_info" ]; then
-                local version_info=""
-                if [ -n "$requested_version" ]; then
-                    # Look for specific version
-                    version_info=$(echo "$full_cmd_info" | grep "^version|$requested_version|" | head -1)
-                else
-                    # Look for best available version (non-dev first, then dev)
-                    version_info=$(echo "$full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
-                    if [ -z "$version_info" ]; then
-                        version_info=$(echo "$full_cmd_info" | grep "^version|dev|" | head -1)
-                    fi
-                fi
-                
-                if [ -n "$version_info" ]; then
-                    local version_name=$(echo "$version_info" | cut -d'|' -f2)
-                    local script_url=$(echo "$version_info" | cut -d'|' -f3)
-                    local install_hook_script=$(echo "$version_info" | cut -d'|' -f5)
-                    local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
-                    local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
-                    local man_url=$(echo "$version_info" | cut -d'|' -f8)
-                    
-                    # Get the registry name from metadata or find which registry has this command
-                    local registry_name=$(get_installation_metadata "$base_cmd" "registry_name")
-                    if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
-                        # Try to find which registry contains this command
-                        registry_name="default"  # Default fallback
-                        if command -v get_registry_names >/dev/null 2>&1; then
-                            for reg in $(get_registry_names); do
-                                if get_registry_commands "$reg" 2>/dev/null | grep -q "^$base_cmd|"; then
-                                    registry_name="$reg"
-                                    break
-                                fi
-                            done
-                        fi
-                    fi
-                    
-                    if install_script "$base_cmd" "$script_url" "$registry_name" "$version_name" "force" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url"; then
-                        echo "${GREEN}done${NC}"
-                        reinstall_count=$((reinstall_count + 1))
-                    else
-                        echo "${RED}failed${NC}"
-                        failed_count=$((failed_count + 1))
-                    fi
-                else
-                    echo "${RED}version not found${NC}"
-                    failed_count=$((failed_count + 1))
-                fi
-            else
-                echo "${RED}not found in registry${NC}"
-                failed_count=$((failed_count + 1))
-            fi
-        else
-            echo "${RED}registry unavailable${NC}"
-            failed_count=$((failed_count + 1))
-        fi
-    done
-    
-    echo ""
-    echo "Reinstallation complete!"
-    echo "Reinstalled: ${GREEN}$reinstall_count${NC} commands"
-    [ $failed_count -gt 0 ] && echo "Failed: ${RED}$failed_count${NC} commands"
-}
+
 
 handle_ms_force_reinstall() {
     echo ""
@@ -2245,11 +2329,20 @@ handle_update() {
         local temp_update=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
         
         printf "  Downloading update script... "
-        if command -v curl >/dev/null 2>&1; then
+        if command -v download_file >/dev/null 2>&1; then
+            if download_file "$update_script_url" "$temp_update"; then
+                printf "${GREEN}done${NC}\n"
+            else
+                printf "${RED}failed${NC}\n"
+                rm -f "$temp_update"
+                return 1
+            fi
+        elif command -v curl >/dev/null 2>&1; then
             if curl -fsSL "$update_script_url" -o "$temp_update"; then
                 printf "${GREEN}done${NC}\n"
             else
                 printf "${RED}failed${NC}\n"
+                rm -f "$temp_update"
                 return 1
             fi
         elif command -v wget >/dev/null 2>&1; then
@@ -2257,10 +2350,12 @@ handle_update() {
                 printf "${GREEN}done${NC}\n"
             else
                 printf "${RED}failed${NC}\n"
+                rm -f "$temp_update"
                 return 1
             fi
         else
             echo "${RED}Error: curl or wget required${NC}"
+            rm -f "$temp_update"
             return 1
         fi
         
@@ -2324,7 +2419,16 @@ handle_update() {
         local skipped_count=0
         for cmd in $installed_commands; do
             printf "  Updating ${CYAN}%s${NC}... " "$cmd"
-            
+
+            # Check if pinned
+            local is_pinned=$(get_installation_metadata "$cmd" "pinned")
+            if [ "$is_pinned" = "true" ]; then
+                local pinned_ver=$(get_installed_version "$cmd")
+                echo "${YELLOW}pinned${NC} ($(format_version "$pinned_ver"))"
+                skipped_count=$((skipped_count + 1))
+                continue
+            fi
+
             # Check version first
             local installed_version=$(get_installed_version "$cmd")
             local registry_version=$(get_registry_version "$cmd")
@@ -2403,13 +2507,22 @@ handle_update() {
                 update_script_url="$raw_url/installer/update.sh"
             fi
             
-            # Download upgrade script
+            # Download upgrade script with security validation
             local temp_upgrade=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-            if command -v curl >/dev/null 2>&1; then
+            if command -v download_file >/dev/null 2>&1; then
+                if download_file "$update_script_url" "$temp_upgrade"; then
+                    upgrade_script="$temp_upgrade"
+                else
+                    echo "${RED}Error: Failed to download upgrade script${NC}"
+                    rm -f "$temp_upgrade"
+                    exit 1
+                fi
+            elif command -v curl >/dev/null 2>&1; then
                 if curl -fsSL "$update_script_url" -o "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
+                    rm -f "$temp_upgrade"
                     exit 1
                 fi
             elif command -v wget >/dev/null 2>&1; then
@@ -2417,10 +2530,12 @@ handle_update() {
                     upgrade_script="$temp_upgrade"
                 else
                     echo "${RED}Error: Failed to download upgrade script${NC}"
+                    rm -f "$temp_upgrade"
                     exit 1
                 fi
             else
                 echo "${RED}Error: curl or wget required for self-update${NC}"
+                rm -f "$temp_upgrade"
                 exit 1
             fi
         fi
@@ -2476,8 +2591,7 @@ handle_update() {
                 exit 1
             fi
         else
-            echo "${RED}Error: Command '$cmd' not found in registry${NC}"
-            echo "Try running: ${CYAN}ms upgrade${NC} to update registries"
+            ms_error "Command '$cmd' not found in registry" "Run 'ms upgrade' to update registries"
             exit 1
         fi
     else
@@ -2558,7 +2672,7 @@ handle_doctor() {
                 version_display="?"
             fi
             
-            # Check if command exists in correct location (2-tier system)
+            # Check if command exists in correct location (registry system)
             local install_dir="$HOME/.local/bin/ms"
             if [ -f "$install_dir/$cmd" ]; then
                 # Verify checksum
@@ -2585,7 +2699,7 @@ handle_doctor() {
                         
                         if [ "$fix_mode" = true ]; then
                             echo "    🔧 Attempting to reinstall $cmd..."
-                            # Use 2-tier system for reinstall
+                            # Use registry system for reinstall
                             if command -v get_command_info >/dev/null 2>&1; then
                                 local full_cmd_info=$(get_command_info "$cmd" "$installed_version" 2>/dev/null)
                                 local version_info=$(echo "$full_cmd_info" | grep "^version|$installed_version|" | head -1)
@@ -2639,22 +2753,20 @@ handle_doctor() {
     
     # 3. System Structure Check
     echo "${YELLOW}System Structure${NC}"
-    local required_dirs=(
-        "$HOME/.local/bin"
-        "$HOME/.local/share/magicscripts"
-        "$HOME/.local/share/magicscripts/scripts"  
-        "$HOME/.local/share/magicscripts/core"
-        "$HOME/.local/share/magicscripts/installed"
+    for dir in \
+        "$HOME/.local/bin" \
+        "$HOME/.local/share/magicscripts" \
+        "$HOME/.local/share/magicscripts/scripts" \
+        "$HOME/.local/share/magicscripts/core" \
+        "$HOME/.local/share/magicscripts/installed" \
         "$HOME/.local/share/magicscripts/reg"
-    )
-    
-    for dir in "${required_dirs[@]}"; do
+    do
         if [ -d "$dir" ]; then
             echo "  ✅ $dir: OK"
         else
             echo "  ❌ $dir: Missing"
             total_issues=$((total_issues + 1))
-            
+
             if [ "$fix_mode" = true ]; then
                 mkdir -p "$dir" 2>/dev/null && {
                     echo "    ✅ Created $dir"
@@ -2664,7 +2776,7 @@ handle_doctor() {
         fi
     done
     echo ""
-    
+
     # 4. PATH Check
     echo "${YELLOW}PATH Configuration${NC}"
     if echo "$PATH" | grep -q "$HOME/.local/bin/ms"; then
@@ -2675,7 +2787,87 @@ handle_doctor() {
         echo "    export PATH=\"\$HOME/.local/bin/ms:\$PATH\""
     fi
     echo ""
-    
+
+    # 5. Orphan Detection
+    echo "${YELLOW}Orphan Detection${NC}"
+    local orphan_found=false
+
+    # Orphan metadata: .msmeta without corresponding wrapper
+    if [ -d "$installed_dir" ]; then
+        for meta_file in "$installed_dir"/*.msmeta; do
+            [ ! -f "$meta_file" ] && continue
+            local cmd=$(basename "$meta_file" .msmeta)
+            local install_dir="$HOME/.local/bin/ms"
+            if [ ! -f "$install_dir/$cmd" ]; then
+                echo "  ❌ Orphan metadata: $cmd (no wrapper in $install_dir)"
+                total_issues=$((total_issues + 1))
+                orphan_found=true
+                if [ "$fix_mode" = true ]; then
+                    rm -f "$meta_file"
+                    echo "    ✅ Removed orphan metadata: $cmd"
+                    fixed_issues=$((fixed_issues + 1))
+                fi
+            fi
+        done
+    fi
+
+    # Orphan scripts: .sh without corresponding metadata
+    local scripts_dir="$HOME/.local/share/magicscripts/scripts"
+    if [ -d "$scripts_dir" ]; then
+        for script_file in "$scripts_dir"/*.sh; do
+            [ ! -f "$script_file" ] && continue
+            local cmd=$(basename "$script_file" .sh)
+            if [ ! -f "$installed_dir/$cmd.msmeta" ]; then
+                echo "  ❌ Orphan script: $cmd (no metadata in $installed_dir)"
+                total_issues=$((total_issues + 1))
+                orphan_found=true
+                if [ "$fix_mode" = true ]; then
+                    rm -f "$script_file"
+                    echo "    ✅ Removed orphan script: $cmd"
+                    fixed_issues=$((fixed_issues + 1))
+                fi
+            fi
+        done
+    fi
+
+    if [ "$orphan_found" = false ]; then
+        echo "  ✅ No orphans detected"
+    fi
+    echo ""
+
+    # 6. Registry Format Validation
+    echo "${YELLOW}Registry Format${NC}"
+    local reg_dir="$HOME/.local/share/magicscripts/reg"
+    local reg_format_ok=true
+    if [ -d "$reg_dir" ]; then
+        for reg_file in "$reg_dir"/*.msreg; do
+            [ ! -f "$reg_file" ] && continue
+            local reg_name=$(basename "$reg_file" .msreg)
+            local bad_lines=0
+            while IFS= read -r line; do
+                case "$line" in
+                    ""|\#*) continue ;;
+                esac
+                local field_count=$(echo "$line" | tr '|' '\n' | wc -l | tr -d ' ')
+                if [ "$field_count" -ne 4 ]; then
+                    bad_lines=$((bad_lines + 1))
+                fi
+            done < "$reg_file"
+            if [ "$bad_lines" -gt 0 ]; then
+                echo "  ❌ $reg_name.msreg: $bad_lines malformed entries (expected 4 fields)"
+                total_issues=$((total_issues + 1))
+                reg_format_ok=false
+            else
+                local entry_count=$(grep -v "^#" "$reg_file" | grep -v "^$" | wc -l | tr -d ' ')
+                echo "  ✅ $reg_name.msreg: $entry_count entries, format OK"
+            fi
+        done
+    fi
+    if [ "$reg_format_ok" = true ] && [ ! -d "$reg_dir" ]; then
+        echo "  ⚠️  No cached registries found"
+    fi
+    echo ""
+
     # Summary
     echo "${YELLOW}Summary${NC}"
     if [ $total_issues -eq 0 ]; then
@@ -2699,6 +2891,354 @@ handle_doctor() {
     fi
     
     return $total_issues
+}
+
+# ============================================================================
+# Utility Commands
+# ============================================================================
+
+handle_clean() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Clean up cache files and orphaned data${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms clean${NC} [--dry-run]"
+        echo ""
+        echo "${YELLOW}Options:${NC}"
+        echo "  ${GREEN}--dry-run${NC}    Show what would be cleaned without deleting"
+        echo ""
+        echo "${YELLOW}Cleans:${NC}"
+        echo "  Registry cache files, orphaned metadata, temp files"
+        return 0
+    fi
+
+    local dry_run=false
+    if [ "$1" = "--dry-run" ]; then
+        dry_run=true
+    fi
+
+    echo "${YELLOW}Cleaning Magic Scripts cache...${NC}"
+    echo ""
+
+    local total_cleaned=0
+
+    # 1. Registry cache files
+    local reg_dir="$HOME/.local/share/magicscripts/reg"
+    local reg_count=0
+    if [ -d "$reg_dir" ]; then
+        for cache_file in "$reg_dir"/*.msreg; do
+            [ -f "$cache_file" ] || continue
+            reg_count=$((reg_count + 1))
+            if [ "$dry_run" = true ]; then
+                echo "  ${CYAN}Would remove:${NC} $cache_file"
+            else
+                rm -f "$cache_file"
+            fi
+        done
+    fi
+    echo "  Registry cache: ${GREEN}$reg_count${NC} file(s)"
+    total_cleaned=$((total_cleaned + reg_count))
+
+    # 2. Orphaned metadata (no wrapper script)
+    local meta_dir="$HOME/.local/share/magicscripts/installed"
+    local orphan_meta_count=0
+    if [ -d "$meta_dir" ]; then
+        for meta_file in "$meta_dir"/*.msmeta; do
+            [ -f "$meta_file" ] || continue
+            local cmd_name=$(basename "$meta_file" .msmeta)
+            if [ ! -f "$HOME/.local/bin/ms/$cmd_name" ]; then
+                orphan_meta_count=$((orphan_meta_count + 1))
+                if [ "$dry_run" = true ]; then
+                    echo "  ${CYAN}Would remove:${NC} $meta_file (orphaned)"
+                else
+                    rm -f "$meta_file"
+                fi
+            fi
+        done
+    fi
+    echo "  Orphaned metadata: ${GREEN}$orphan_meta_count${NC} file(s)"
+    total_cleaned=$((total_cleaned + orphan_meta_count))
+
+    # 3. Temp files
+    local tmp_count=0
+    for tmp_file in /tmp/ms_*; do
+        [ -f "$tmp_file" ] || continue
+        tmp_count=$((tmp_count + 1))
+        if [ "$dry_run" = true ]; then
+            echo "  ${CYAN}Would remove:${NC} $tmp_file"
+        else
+            rm -f "$tmp_file"
+        fi
+    done
+    echo "  Temp files: ${GREEN}$tmp_count${NC} file(s)"
+    total_cleaned=$((total_cleaned + tmp_count))
+
+    echo ""
+    if [ "$dry_run" = true ]; then
+        echo "Dry run: ${YELLOW}$total_cleaned${NC} file(s) would be cleaned."
+    else
+        echo "Cleaned ${GREEN}$total_cleaned${NC} file(s)."
+    fi
+}
+
+handle_export() {
+    local full_mode=false
+
+    case "$1" in
+        --full) full_mode=true ;;
+        -h|--help|help)
+            echo "${YELLOW}Export installed commands list${NC}"
+            echo ""
+            echo "${YELLOW}Usage:${NC}"
+            echo "  ${CYAN}ms export${NC}           Export simple list (name:version)"
+            echo "  ${CYAN}ms export --full${NC}    Include registry info (name:version@registry)"
+            echo ""
+            echo "Output goes to stdout. Redirect to a file:"
+            echo "  ${CYAN}ms export > backup.txt${NC}"
+            return 0
+            ;;
+    esac
+
+    local ms_install_dir="$HOME/.local/bin/ms"
+
+    if [ "$full_mode" = true ]; then
+        echo "# Magic Scripts export (full)"
+    else
+        echo "# Magic Scripts export"
+    fi
+    echo "# Date: $(date -u +"%Y-%m-%d" 2>/dev/null || date -u)"
+
+    if [ -d "$ms_install_dir" ]; then
+        for cmd_file in "$ms_install_dir"/*; do
+            [ -f "$cmd_file" ] && [ -x "$cmd_file" ] || continue
+            local cmd_name=$(basename "$cmd_file")
+            [ "$cmd_name" = "ms" ] && continue
+
+            local ver=$(get_installed_version "$cmd_name")
+            [ "$ver" = "unknown" ] && ver="latest"
+
+            if [ "$full_mode" = true ]; then
+                local reg=$(get_installation_metadata "$cmd_name" "registry_name")
+                [ "$reg" = "unknown" ] && reg="default"
+                echo "${cmd_name}:${ver}@${reg}"
+            else
+                echo "${cmd_name}:${ver}"
+            fi
+        done
+    fi
+}
+
+handle_import() {
+    local import_file=""
+
+    case "$1" in
+        -h|--help|help)
+            echo "${YELLOW}Import and install commands from export file${NC}"
+            echo ""
+            echo "${YELLOW}Usage:${NC}"
+            echo "  ${CYAN}ms import <file>${NC}          Install from export file"
+            echo "  ${CYAN}ms import --file <file>${NC}   Same as above"
+            echo ""
+            echo "File format (one per line):"
+            echo "  command:version"
+            echo "  command:version@registry"
+            return 0
+            ;;
+        --file)
+            import_file="$2"
+            ;;
+        *)
+            import_file="$1"
+            ;;
+    esac
+
+    if [ -z "$import_file" ]; then
+        ms_error "No import file specified" "ms import <file>"
+        return 1
+    fi
+
+    if [ ! -f "$import_file" ]; then
+        ms_error "File not found: '$import_file'"
+        return 1
+    fi
+
+    echo "${YELLOW}Importing commands from $import_file...${NC}"
+    echo ""
+
+    local installed_count=0
+    local skipped_count=0
+    local failed_count=0
+
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        case "$line" in
+            "#"*|"") continue ;;
+        esac
+
+        # Parse name:version[@registry]
+        local cmd_name=""
+        local cmd_version=""
+        local cmd_registry=""
+
+        # Strip @registry if present
+        case "$line" in
+            *@*)
+                cmd_registry=$(echo "$line" | sed 's/.*@//')
+                line=$(echo "$line" | sed 's/@.*//')
+                ;;
+        esac
+
+        cmd_name=$(echo "$line" | cut -d':' -f1)
+        cmd_version=$(echo "$line" | cut -d':' -f2)
+
+        [ -z "$cmd_name" ] && continue
+
+        # Check if already installed at same version
+        local current_ver=$(get_installed_version "$cmd_name" 2>/dev/null)
+        if [ "$current_ver" = "$cmd_version" ] && [ "$current_ver" != "unknown" ]; then
+            echo "  ${CYAN}$cmd_name${NC}: ${GREEN}already installed${NC} ($(format_version "$current_ver"))"
+            skipped_count=$((skipped_count + 1))
+            continue
+        fi
+
+        printf "  Installing ${CYAN}%s${NC}:%s... " "$cmd_name" "$cmd_version"
+
+        # Use handle_install with version
+        if [ "$cmd_version" != "latest" ] && [ -n "$cmd_version" ]; then
+            handle_install "${cmd_name}:${cmd_version}" >/dev/null 2>&1
+        else
+            handle_install "$cmd_name" >/dev/null 2>&1
+        fi
+
+        if [ $? -eq 0 ]; then
+            echo "${GREEN}done${NC}"
+            installed_count=$((installed_count + 1))
+        else
+            echo "${RED}failed${NC}"
+            failed_count=$((failed_count + 1))
+        fi
+    done < "$import_file"
+
+    echo ""
+    echo "Import complete!"
+    echo "  Installed: ${GREEN}$installed_count${NC}"
+    [ $skipped_count -gt 0 ] && echo "  Skipped: ${GREEN}$skipped_count${NC}"
+    [ $failed_count -gt 0 ] && echo "  Failed: ${RED}$failed_count${NC}"
+}
+
+
+handle_run() {
+    local cmd="$1"
+
+    if [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || [ "$cmd" = "help" ]; then
+        echo "${YELLOW}Run a command without installing it${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms run <command>${NC} [args...]"
+        echo ""
+        echo "Downloads the latest version, verifies checksum, executes, and cleans up."
+        echo "The command is not installed permanently."
+        return 0
+    fi
+
+    if [ -z "$cmd" ]; then
+        ms_error "No command specified" "ms run <command> [args...]"
+        return 1
+    fi
+
+    shift  # Remove command name, rest are args
+
+    if ! command -v get_script_info >/dev/null 2>&1; then
+        ms_error "Registry system not available" "Run 'ms upgrade' to update registries"
+        return 1
+    fi
+
+    local script_info=$(get_script_info "$cmd" 2>/dev/null)
+    if [ -z "$script_info" ]; then
+        ms_error "Command '$cmd' not found in any registry" "Run 'ms search' to see available commands"
+        return 1
+    fi
+
+    local script_url=$(echo "$script_info" | cut -d'|' -f3)
+    local expected_checksum=$(echo "$script_info" | cut -d'|' -f7)
+
+    local tmp_script="/tmp/ms_run_${cmd}_$$"
+
+    # Ensure cleanup on exit
+    _ms_run_cleanup() {
+        rm -f "$tmp_script"
+    }
+    trap '_ms_run_cleanup' EXIT INT TERM
+
+    printf "Downloading ${CYAN}%s${NC}... " "$cmd"
+
+    if command -v download_file >/dev/null 2>&1; then
+        if ! download_file "$script_url" "$tmp_script" 2>/dev/null; then
+            echo "${RED}failed${NC}"
+            ms_error "Failed to download '$cmd'"
+            trap - EXIT INT TERM
+            rm -f "$tmp_script"
+            return 1
+        fi
+    elif command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL "$script_url" -o "$tmp_script" 2>/dev/null; then
+            echo "${RED}failed${NC}"
+            ms_error "Failed to download '$cmd'"
+            trap - EXIT INT TERM
+            rm -f "$tmp_script"
+            return 1
+        fi
+    else
+        echo "${RED}failed${NC}"
+        ms_error "curl or wget required"
+        trap - EXIT INT TERM
+        return 1
+    fi
+
+    echo "${GREEN}done${NC}"
+
+    # Verify checksum if not dev
+    if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "dev" ] && [ "$expected_checksum" != "unknown" ]; then
+        local actual_checksum=$(calculate_file_checksum "$tmp_script")
+        if [ "$actual_checksum" != "$expected_checksum" ]; then
+            ms_error "Checksum mismatch for '$cmd'" "Expected: $expected_checksum, Got: $actual_checksum"
+            trap - EXIT INT TERM
+            rm -f "$tmp_script"
+            return 1
+        fi
+    fi
+
+    chmod +x "$tmp_script"
+
+    echo ""
+    # Run the script with remaining args
+    sh "$tmp_script" "$@"
+    local exit_code=$?
+
+    # Cleanup
+    trap - EXIT INT TERM
+    rm -f "$tmp_script"
+
+    return $exit_code
+}
+
+
+# Load pack tools module (lazy loading)
+load_pack_tools() {
+    if [ -z "${PACK_TOOLS_LOADED:-}" ]; then
+        for lib in "$MAGIC_SCRIPT_DIR/core/pack.sh" \
+                   "$SCRIPT_DIR/../core/pack.sh" \
+                   "$SCRIPT_DIR/../pack.sh"; do
+            if [ -f "$lib" ]; then
+                . "$lib"
+                PACK_TOOLS_LOADED=1
+                return 0
+            fi
+        done
+        ms_error "Pack tools library not found"
+        return 1
+    fi
+    return 0
 }
 
 # Main command handling
@@ -2752,19 +3292,104 @@ case "$1" in
         shift
         handle_versions "$@"
         ;;
+    info)
+        shift
+        handle_info "$@"
+        ;;
     reinstall)
         shift
-        handle_reinstall "$@"
+        if [ $# -eq 0 ]; then
+            ms_error "No command specified" "ms reinstall <command>"
+            exit 1
+        fi
+        if [ "$1" = "ms" ]; then
+            handle_ms_force_reinstall
+        else
+            for _reinstall_cmd in "$@"; do
+                _ri_full_cmd_info=$(get_command_info "$_reinstall_cmd" 2>/dev/null)
+                if [ -z "$_ri_full_cmd_info" ]; then
+                    ms_error "Command '$_reinstall_cmd' not found in any registry" "ms upgrade"
+                    continue
+                fi
+                _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
+                if [ -z "$_ri_version_info" ]; then
+                    _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | head -1)
+                fi
+                if [ -z "$_ri_version_info" ]; then
+                    ms_error "No version available for '$_reinstall_cmd'"
+                    continue
+                fi
+                # Get registry_name from existing .msmeta file
+                _ri_registry_name=""
+                _ri_meta_file="$MAGIC_DATA_DIR/installed/${_reinstall_cmd}.msmeta"
+                if [ -f "$_ri_meta_file" ]; then
+                    _ri_registry_name=$(grep "^registry_name=" "$_ri_meta_file" 2>/dev/null | cut -d'=' -f2-)
+                fi
+                [ -z "$_ri_registry_name" ] && _ri_registry_name="unknown"
+                _ri_found_ver=$(echo "$_ri_version_info" | cut -d'|' -f2)
+                _ri_script_url=$(echo "$_ri_version_info" | cut -d'|' -f3)
+                _ri_install_hook=$(echo "$_ri_version_info" | cut -d'|' -f5)
+                _ri_uninstall_hook=$(echo "$_ri_version_info" | cut -d'|' -f6)
+                _ri_update_hook=$(echo "$_ri_version_info" | cut -d'|' -f7)
+                _ri_man_url_val=$(echo "$_ri_version_info" | cut -d'|' -f8)
+                printf "  Reinstalling ${CYAN}%s${NC}:${CYAN}%s${NC}... " "$_reinstall_cmd" "$_ri_found_ver"
+                if install_script "$_reinstall_cmd" "$_ri_script_url" "$_ri_registry_name" "$_ri_found_ver" "force" "$_ri_install_hook" "$_ri_uninstall_hook" "$_ri_update_hook" "$_ri_man_url_val"; then
+                    echo "${GREEN}done${NC}"
+                else
+                    echo "${RED}failed${NC}"
+                fi
+            done
+        fi
+        ;;
+    outdated)
+        shift
+        handle_outdated "$@"
+        ;;
+    which)
+        shift
+        handle_which "$@"
+        ;;
+    pin)
+        shift
+        handle_pin "$@"
+        ;;
+    unpin)
+        shift
+        handle_unpin "$@"
+        ;;
+    clean)
+        shift
+        handle_clean "$@"
+        ;;
+    init)
+        ms_error "'ms init' has been moved" "Use 'ms pack init <name>' instead"
+        exit 1
+        ;;
+    export)
+        shift
+        handle_export "$@"
+        ;;
+    import)
+        shift
+        handle_import "$@"
+        ;;
+    run)
+        shift
+        handle_run "$@"
+        ;;
+    pub)
+        shift
+        load_pack_tools || exit 1
+        handle_pub "$@"
         ;;
     *)
         unknown_cmd="$1"
         suggestion=$(suggest_similar_command "$unknown_cmd")
         if [ -n "$suggestion" ]; then
-            echo "${RED}Error: '$unknown_cmd' is not a command. Did you mean '$suggestion'?${NC}"
+            ms_error "'$unknown_cmd' is not a command" "Did you mean '$suggestion'?"
         else
-            echo "${RED}Error: Unknown command: '$unknown_cmd'${NC}"
+            ms_error "Unknown command: '$unknown_cmd'" "Run 'ms help' for available commands"
         fi
-        echo "Run ${CYAN}ms help${NC} for available commands"
         exit 1
         ;;
 esac

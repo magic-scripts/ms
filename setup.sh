@@ -13,9 +13,13 @@ INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
 TEMP_DIR="$HOME/.cache/magicscripts-$$"
 
+# Configurable branch/URL for development testing
+# Usage: MS_INSTALL_BRANCH=develop sh setup.sh
+BRANCH="${MS_INSTALL_BRANCH:-main}"
+RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/${BRANCH}"
+
 # URLs
 REPO_URL="https://github.com/magic-scripts/ms"
-RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/main"
 REGISTRY_URL="$RAW_URL/registry/ms.msreg"
 
 # Version parameters
@@ -47,6 +51,19 @@ download_file() {
     local url="$1"
     local output="$2"
     
+    # URL security validation
+    case "$url" in
+        https://*) ;; # HTTPS OK
+        *) echo "${RED}Error: Only HTTPS URLs are allowed${NC}"; return 1 ;;
+    esac
+    local domain=$(echo "$url" | sed 's|https://||' | cut -d'/' -f1 | cut -d':' -f1)
+    case "$domain" in
+        localhost|127.0.0.1|0.0.0.0|::1) echo "${RED}Error: Internal URLs are not allowed${NC}"; return 1 ;;
+    esac
+    case "$domain" in
+        10.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.168.*) echo "${RED}Error: Private network URLs are not allowed${NC}"; return 1 ;;
+    esac
+
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$output")"
     
@@ -119,20 +136,37 @@ find_best_ms_version() {
         exit 1
     fi
     
-    # Parse registry for ms command - now handling 2-tier system
-    # New format: name|msver_url|description|category|msver_checksum
-    while IFS='|' read -r name msver_url desc category msver_checksum; do
+    # Parse registry for ms command - 3-tier system (msreg -> mspack -> msver)
+    # Format: name|mspack_url|description|category
+    while IFS='|' read -r name package_url desc category; do
         [ "$name" = "ms" ] || continue
-        
-        # Download and parse ms.msver file
-        local temp_msver="$TEMP_DIR/ms_msver_$$.txt"
-        if ! download_file "$msver_url" "$temp_msver"; then
-            echo "${RED}Error: Cannot download ms.msver from $msver_url${NC}"
+
+        # Download package file (could be .mspack or legacy .msver)
+        local temp_package="$TEMP_DIR/ms_package_$$.txt"
+        if ! download_file "$package_url" "$temp_package"; then
+            echo "${RED}Error: Cannot download package file from $package_url${NC}"
             exit 1
         fi
+
+        # Detect 3-tier: check for msver_url| line in downloaded file
+        local actual_msver_url=""
+        actual_msver_url=$(grep "^msver_url|" "$temp_package" 2>/dev/null | head -1 | cut -d'|' -f2)
+
+        local temp_msver="$TEMP_DIR/ms_msver_$$.txt"
+        if [ -n "$actual_msver_url" ]; then
+            # 3-tier: download actual .msver from mspack's msver_url pointer
+            if ! download_file "$actual_msver_url" "$temp_msver"; then
+                echo "${RED}Error: Cannot download ms.msver from $actual_msver_url${NC}"
+                exit 1
+            fi
+        else
+            # Legacy 2-tier: package_url pointed directly to .msver
+            cp "$temp_package" "$temp_msver"
+        fi
+        rm -f "$temp_package"
         
         # Parse version information from .msver file
-        while IFS='|' read -r entry_type version url checksum install_script uninstall_script; do
+        while IFS='|' read -r entry_type version url checksum install_script uninstall_script _update_script _man_url; do
             [ "$entry_type" = "version" ] || continue
             
             # If specific version requested, match exactly
@@ -264,6 +298,11 @@ show_help() {
 while [ $# -gt 0 ]; do
     case "$1" in
         -v|--version)
+            if [ -z "$2" ]; then
+                echo "${RED}Error: -v requires a version argument${NC}"
+                echo "Usage: setup.sh -v <version>"
+                exit 1
+            fi
             REQUESTED_VERSION="$2"
             shift 2
             ;;
@@ -371,7 +410,10 @@ echo "Installing Magic Scripts core system..."
             echo "    Verifying checksum..."
             actual_checksum=$(shasum -a 256 "$MAGIC_DIR/scripts/ms.sh" 2>/dev/null | cut -d' ' -f1 | cut -c1-8 || echo "unknown")
             if [ "$actual_checksum" != "$MS_CHECKSUM" ]; then
-                echo "${YELLOW}    Warning: Checksum mismatch (expected: $MS_CHECKSUM, got: $actual_checksum)${NC}"
+                echo "${RED}    Error: Checksum mismatch (expected: $MS_CHECKSUM, got: $actual_checksum)${NC}"
+                echo "${RED}    Installation aborted. The downloaded file may be corrupted or tampered.${NC}"
+                rm -f "$MAGIC_DIR/scripts/ms.sh"
+                exit 1
             else
                 echo "${GREEN}    ✓ Checksum verified${NC}"
             fi

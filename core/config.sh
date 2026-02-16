@@ -14,11 +14,11 @@ ms_internal_ensure_config_dirs() {
     mkdir -p "$REG_DIR" 2>/dev/null
 }
 
-# Get configuration registry files (merged from all registries) - supports 2-tier system
+# Get configuration registry files (merged from all registries)
 ms_internal_get_config_registry_file() {
     local merged_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
     
-    # In 2-tier system, config info is in .msver files pointed by .msreg files
+    # Config info is in .mspack files pointed by .msreg files
     if [ -f "$REGLIST_FILE" ]; then
         while IFS=':' read -r name url; do
             [ -z "$name" ] && continue
@@ -49,7 +49,7 @@ ms_internal_get_config_registry_file() {
         done < "$REGLIST_FILE"
     fi
     
-    # Fallback to development registry (also 2-tier now)
+    # Fallback to development registry
     if [ ! -s "$merged_file" ] && [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
         grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" 2>/dev/null | grep -v "^$" | while IFS='|' read -r cmd msver_url desc category; do
             [ -z "$cmd" ] || [ -z "$msver_url" ] && continue

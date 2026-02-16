@@ -1,11 +1,8 @@
-# ms Version Tree  
+# ms Version Tree
 # Format: version|version_name|download_url|checksum|install_script|uninstall_script|update_script|man_url
-#         config|key|default_value|description|category|scripts
-
-# Version information
+#
+# Version information only - package metadata is in ms.mspack
 # install_script, uninstall_script, update_script, and man_url are optional (use empty string if not needed)
 # update_script is executed when updating TO this version (e.g., 1.0.0 -> 1.0.1 runs 1.0.1's update_script)
 # man_url points to the manual page file (.1 format) for the command
 version|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/scripts/ms.sh|dev|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/install.sh|https://raw.githubusercontent.com/magic-scripts/ms/develop/installer/uninstall.sh|https://raw.githubusercontent.com/magic-scripts/ms/main/installer/update.sh|https://raw.githubusercontent.com/magic-scripts/ms/main/man/ms.1
-
-# Configuration keys (none for ms core - configurations are managed by individual commands)

@@ -1,104 +1,85 @@
-# Magic Scripts v0.0.1
+# Magic Scripts
 
-A comprehensive collection of developer automation tools for streamlined project setup, configuration management, and development workflows.
+A POSIX shell-based CLI tool for distributing and managing developer automation scripts. Uses a 3-tier registry system to discover, install, update, and configure commands from remote repositories.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
+
 ```bash
-# Latest version (recommended)
 curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+```
 
-# Specific version
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v 0.0.1
+After installation, reload your shell and verify:
 
-# Development version
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh -s -- -v dev
+```bash
+ms --version
+ms status
 ```
 
 ### First Steps
+
 ```bash
 ms upgrade                                    # Update registries
-ms install -r default                        # Install all commands
-ms config set AUTHOR_NAME "Your Name"        # Configure settings
+ms install -r default                         # Install all commands
+ms config set AUTHOR_NAME "Your Name"         # Configure settings
 ```
 
-### Uninstallation
+## Documentation
+
+### User Guides
+
+- [Getting Started](docs/user-guide/GETTING_STARTED.md) — Installation and first steps
+- [Command Reference](docs/user-guide/COMMANDS.md) — Complete command documentation
+- [Configuration](docs/user-guide/CONFIGURATION.md) — Managing settings
+- [Troubleshooting](docs/user-guide/TROUBLESHOOTING.md) — Resolving common issues
+
+### Developer Guides
+
+- [Creating Commands](docs/dev-guide/CREATING_COMMANDS.md) — Build your own Magic Scripts commands
+- [Publishing](docs/dev-guide/PUBLISHING.md) — The `ms pub pack` toolchain
+- [Registry System](docs/dev-guide/REGISTRY.md) — Deep dive into the 3-tier registry
+- [Architecture](docs/dev-guide/ARCHITECTURE.md) — System design and internals
+
+## Common Usage
+
 ```bash
-# Normal uninstallation
-ms uninstall ms
+# Search and install
+ms search postgres
+ms install pgadduser mschecksum
 
-# Emergency cleanup (if ms is corrupted)
-curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh | sh
+# Update and maintain
+ms update
+ms outdated
+ms doctor
+
+# Pin versions
+ms pin pgadduser
+ms unpin pgadduser
+
+# Configuration
+ms config set DB_HOST localhost
+ms config list
+
+# Developer tools
+ms pub pack init mycommand
+ms pub pack release registry/ 1.0.0
 ```
 
-### Self-Update
-```bash
-ms self-update                                # Update ms core system
-# or
-ms reinstall ms                               # Reinstall ms core system
-```
+## Available Commands
 
-## 📖 Documentation
-
-### System Overview
-- **Magic Scripts CLI (`ms`)** - Main interface for managing all commands
-- **2-Tier Registry System** - Secure, versioned command distribution
-- **Unified Configuration** - Shared settings across all commands
-
-### Available Commands
 | Command | Description |
 |---------|-------------|
-| `gigen` | .gitignore template generator |
-| `licgen` | License generator for various licenses |
 | `pgadduser` | PostgreSQL user and database setup |
-| `dcwinit` | Docker Compose wireframe generator |
-| `dockergen` | Optimized Dockerfile generator |
-| `projinit` | Project initializer for various frameworks |
 | `mschecksum` | SHA256 checksum calculator |
+| `envdiff` | Environment file comparison |
 
-### Detailed Guides
-- 📋 [Configuration System](docs/CONFIGURATION.md) - Settings and config management
-- 🏪 [Registry System](docs/REGISTRY.md) - Command distribution and versioning  
-- 🛠️ [Development Guide](docs/DEVELOPMENT.md) - Creating custom scripts
-- 🔧 [System Architecture](LOCAL_INSTALLATION_STRUCTURE.md) - Local installation structure
-- 🚨 [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
+Search for more commands: `ms search`
 
-## 🚀 Common Usage
+## Contributing
 
-```bash
-# Configuration
-ms config set AUTHOR_NAME "Your Name"        # Set configuration
-ms config list                               # View all config
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, branch strategy, and coding conventions.
 
-# Registry Management  
-ms reg list                                   # List registries
-ms reg add custom https://example.com/reg    # Add registry
-ms upgrade                                    # Update all registries
+## License
 
-# Command Installation
-ms search docker                              # Search commands
-ms install gigen licgen                       # Install specific commands
-ms install -r default                         # Install from registry
-ms status                                     # Check installation status
-
-# System Maintenance
-ms doctor                                     # Run diagnostics
-ms update                                     # Update all commands
-```
-
-## 📝 License
-
-MIT License - see LICENSE file for details.
-
-## 🤝 Contributing
-
-1. Fork and create feature branch from `develop`
-2. Follow existing patterns and test thoroughly  
-3. Submit PR to `develop` branch
-
-See [Development Guide](docs/DEVELOPMENT.md) for detailed information.
-
----
-
-**Magic Scripts v0.0.1** - Streamlining development workflows, one script at a time.
+MIT License — see [LICENSE](LICENSE) file for details.

@@ -25,10 +25,13 @@ Thank you for your interest in contributing to Magic Scripts! This document prov
    ```bash
    # Test script functionality
    ./scripts/your-script.sh --version
-   
+
    # Calculate and verify checksum
-   msreg checksum scripts/your-script.sh
-   
+   ms pub pack checksum scripts/your-script.sh
+
+   # Verify registry files
+   ms pub pack verify registry/
+
    # Test with Magic Scripts (if applicable)
    ms install yourcommand
    yourcommand --version

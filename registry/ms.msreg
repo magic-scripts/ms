@@ -1,11 +1,11 @@
-# Magic Scripts Master Registry (2-Tier System)
-# Format: name|msver_url|description|category
-# 
-# Each command now points to its own .msver file containing:
-# - Version information (version|ver|url|checksum)
-# - Configuration keys (config|key|default|desc|category|scripts)
+# Magic Scripts Master Registry (3-Tier System)
+# Format: name|mspack_url|description|category
+#
+# Each command points to its own .mspack file containing:
+# - Package metadata (author, license, dependencies, config keys)
+# - Link to .msver file for version information
 
-# Core Commands - pointing to individual .msver files in registry/ directories
-ms|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.msver|Magic Scripts main interface|core
-pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/main/registry/pgadduser.msver|PostgreSQL user and database setup|database
-mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/registry/mschecksum.msver|SHA256 checksum calculator for Magic Scripts|utilities
+# Core Commands - pointing to individual .mspack files in registry/ directories
+ms|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.mspack|Magic Scripts main interface|core
+pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/main/registry/pgadduser.mspack|PostgreSQL user and database setup|database
+mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/registry/mschecksum.mspack|SHA256 checksum calculator for Magic Scripts|utilities

@@ -30,7 +30,7 @@ init_registry_dirs() {
     else
         # Migrate from old 'ms' registry name to 'default'
         if grep -q "^ms:" "$REGLIST_FILE" && ! grep -q "^default:" "$REGLIST_FILE"; then
-            sed -i.bak 's/^ms:/default:/' "$REGLIST_FILE"
+            sed 's/^ms:/default:/' "$REGLIST_FILE" > "${REGLIST_FILE}.tmp" && mv "${REGLIST_FILE}.tmp" "$REGLIST_FILE"
             # Also rename the cached registry file
             if [ -f "$REG_DIR/ms.msreg" ] && [ ! -f "$REG_DIR/default.msreg" ]; then
                 mv "$REG_DIR/ms.msreg" "$REG_DIR/default.msreg" 2>/dev/null || true
@@ -126,12 +126,6 @@ add_registry() {
         return 1
     fi
     
-    # Validate name (alphanumeric + underscore/hyphen only)
-    if ! echo "$name" | grep -q "^[a-zA-Z0-9_-]*$"; then
-        echo "Error: Registry name can only contain letters, numbers, underscore, and hyphen" >&2
-        return 1
-    fi
-    
     # Validate URL format and security
     if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
         echo "Error: Invalid URL format. Must be a valid HTTP/HTTPS URL" >&2
@@ -139,8 +133,8 @@ add_registry() {
     fi
     
     # Security check: ensure URL points to a reasonable domain
-    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)"; then
-        echo "Error: URLs pointing to localhost are not allowed for security reasons" >&2
+    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)"; then
+        echo "Error: URLs pointing to localhost or private networks are not allowed for security reasons" >&2
         return 1
     fi
     
@@ -184,7 +178,7 @@ remove_registry() {
     if [ "$name" = "$DEFAULT_REGISTRY_NAME" ]; then
         echo "Warning: Removing the default registry '$DEFAULT_REGISTRY_NAME'" >&2
         echo "You can restore it later with:" >&2
-        echo "  ms reg add $DEFAULT_REGISTRY_NAME $DEFAULT_REGISTRY_URL" >&2
+        echo "  ms reg add $DEFAULT_REGISTRY_NAME $(get_default_registry_url)" >&2
         echo "" >&2
     fi
     
@@ -235,7 +229,7 @@ update_registry() {
     printf "Updating %s... " "$name"
     if download_file "$url" "$temp_file"; then
         # Validate downloaded file (basic format check)
-        if grep -q ":" "$temp_file" 2>/dev/null; then
+        if grep -q "|" "$temp_file" 2>/dev/null; then
             mv "$temp_file" "$reg_file"
             echo "done"
             return 0
@@ -290,11 +284,10 @@ update_registries() {
 # Get all commands from all registries
 get_all_commands() {
     local temp_commands=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-    trap "rm -f '$temp_commands'" EXIT
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^config:" | grep -v "^$" | while IFS=':' read -r cmd script desc category; do
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
             [ -n "$cmd" ] && echo "$cmd" >> "$temp_commands"
         done
     fi
@@ -364,7 +357,7 @@ get_script_description() {
     local info=$(get_script_info "$cmd")
     
     if [ -n "$info" ]; then
-        echo "$info" | cut -d':' -f3
+        echo "$info" | cut -d'|' -f4
     else
         echo "Magic Scripts command"
     fi
@@ -379,40 +372,6 @@ get_registry_commands() {
         grep -v "^#" "$reg_file" | grep -v "^$"
     else
         return 1
-    fi
-}
-
-# Get config keys from all registries
-get_all_config_keys() {
-    local temp_configs=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-    trap "rm -f '$temp_configs'" EXIT
-    
-    # Check development registry first
-    if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
-        grep "^config|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" >> "$temp_configs"
-    fi
-    
-    # Add configs from cached registries if not already found
-    if [ -f "$REGLIST_FILE" ]; then
-        while IFS=':' read -r name url; do
-            [ -z "$name" ] && continue
-            [ -z "$url" ] && continue
-            [ "${name#\\#}" != "$name" ] && continue  # Skip comments
-            
-            local reg_file="$REG_DIR/${name}.msreg"
-            if [ -f "$reg_file" ]; then
-                grep "^config|" "$reg_file" | while IFS='|' read -r prefix key default desc category scripts; do
-                    if [ -n "$key" ] && ! grep -q "^config|$key|" "$temp_configs" 2>/dev/null; then
-                        echo "config|$key|$default|$desc|$category|$scripts" >> "$temp_configs"
-                    fi
-                done
-            fi
-        done < "$REGLIST_FILE"
-    fi
-    
-    if [ -f "$temp_configs" ]; then
-        cat "$temp_configs"
-        rm -f "$temp_configs"
     fi
 }
 
@@ -432,7 +391,7 @@ search_commands() {
             [ -z "$cmd" ] && continue
             
             if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
-                # In 2-tier system, version info is in .msver file pointed by $script
+                # Version info is in .msver file pointed by $script
                 # For now, just show basic info without version
                 printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
             fi
@@ -452,7 +411,7 @@ search_commands() {
                     [ -z "$cmd" ] && continue
                     
                     if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
-                        # In 2-tier system, just show basic info without version
+                        # Show basic info without version
                         printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
                     fi
                 done
@@ -476,74 +435,107 @@ search_commands() {
 }
 
 # Download and parse .msver file
-download_and_parse_msver() {
-    local msver_url="$1"
-    local target_cmd="$2"      # Optional: filter by command
-    local target_version="$3"  # Optional: filter by version
-    
-    local temp_msver=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
-    trap "rm -f '$temp_msver'" EXIT
-    
-    if ! download_file "$msver_url" "$temp_msver"; then
-        echo "Error: Cannot download .msver file from $msver_url" >&2
-        return 1
-    fi
-    
-    # Ensure file ends with newline for proper parsing
-    echo "" >> "$temp_msver"
-    
-    # Parse .msver file
+# Parse a version-only .msver file
+# Outputs: version|... lines
+_parse_msver_file() {
+    local msver_file="$1"
+    local target_version="$2"
+
     while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3; do
-        [ "${entry_type#\#}" != "$entry_type" ] && continue  # Skip comments
+        [ "${entry_type#\#}" != "$entry_type" ] && continue
         [ -z "$entry_type" ] && continue
-        
+
         case "$entry_type" in
             version)
-                local version="$key"
-                local url="$value" 
-                local checksum="$desc_or_checksum"
-                local install_script="$extra1"
-                local uninstall_script="$extra2"
-                local update_script="$extra3"
-                
-                # Filter by version if specified
-                if [ -n "$target_version" ] && [ "$version" != "$target_version" ]; then
+                if [ -n "$target_version" ] && [ "$key" != "$target_version" ]; then
                     continue
                 fi
-                
-                echo "version|$version|$url|$checksum|$install_script|$uninstall_script|$update_script"
-                ;;
-            config)
-                local config_key="$key"
-                local default_value="$value"
-                local description="$desc_or_checksum"
-                local category="$extra1"
-                local scripts="$extra2"
-                
-                # Filter by command if specified (check if command is in scripts list)
-                if [ -n "$target_cmd" ]; then
-                    case ",$scripts," in
-                        *,"$target_cmd",*) ;; # Command found in scripts list
-                        *) continue ;;        # Command not found, skip
-                    esac
-                fi
-                
-                echo "config|$config_key|$default_value|$description|$category|$scripts"
+                echo "version|$key|$value|$desc_or_checksum|$extra1|$extra2|$extra3"
                 ;;
         esac
-    done < "$temp_msver"
-    
-    rm -f "$temp_msver"
+    done < "$msver_file"
 }
 
-# Get command info from 2-tier registry system
+# Download and parse a package file (.mspack or legacy .msver)
+# Handles both 3-tier (mspack -> msver) and legacy 2-tier (msver with config) formats
+# Outputs: meta|, config|, and version| lines
+download_and_parse_msver() {
+    local package_url="$1"
+    local target_cmd="$2"
+    local target_version="$3"
+
+    local temp_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+
+    if ! download_file "$package_url" "$temp_file"; then
+        echo "Error: Cannot download package file from $package_url" >&2
+        return 1
+    fi
+
+    echo "" >> "$temp_file"
+
+    # Detect if this is a 3-tier mspack (has msver_url| line) or legacy 2-tier msver
+    local msver_url=""
+
+    # Parse the file
+    while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3; do
+        [ "${entry_type#\#}" != "$entry_type" ] && continue
+        [ -z "$entry_type" ] && continue
+
+        case "$entry_type" in
+            version)
+                # Legacy .msver or inline version lines
+                if [ -n "$target_version" ] && [ "$key" != "$target_version" ]; then
+                    continue
+                fi
+                echo "version|$key|$value|$desc_or_checksum|$extra1|$extra2|$extra3"
+                ;;
+            config)
+                if [ -n "$target_cmd" ]; then
+                    case ",$extra2," in
+                        *,"$target_cmd",*) ;;
+                        *) continue ;;
+                    esac
+                fi
+                echo "config|$key|$value|$desc_or_checksum|$extra1|$extra2"
+                ;;
+            msver_url)
+                # 3-tier: this file is an mspack, store URL for later download
+                msver_url="$key"
+                ;;
+            name|description|author|license|license_url|repo_url|issues_url|homepage_url|docs_url|stability|min_ms_version)
+                # Package metadata: key|value
+                echo "meta|$entry_type|$key"
+                ;;
+        esac
+    done < "$temp_file"
+
+    # If msver_url was found, this is a 3-tier mspack — download and parse the msver too
+    if [ -n "$msver_url" ]; then
+        local temp_msver=$(mktemp) || { rm -f "$temp_file"; return 1; }
+        if download_file "$msver_url" "$temp_msver"; then
+            echo "" >> "$temp_msver"
+            _parse_msver_file "$temp_msver" "$target_version"
+        else
+            echo "Error: Cannot download .msver file from $msver_url" >&2
+            rm -f "$temp_msver"
+            rm -f "$temp_file"
+            return 1
+        fi
+        rm -f "$temp_msver"
+    fi
+
+    rm -f "$temp_file"
+}
+
+# Get command info from registry system (supports both 2-tier and 3-tier)
+# Returns: command_meta|, meta|, config|, and version| lines
 get_command_info() {
     local cmd="$1"
     local version="$2"  # Optional: specific version
-    
+
     # First get command metadata from .msreg files
     local cmd_meta=""
-    
+
     # Check development registry first (if in development environment)
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
     if [ -f "$script_dir/registry/ms.msreg" ]; then
@@ -551,14 +543,14 @@ get_command_info() {
     elif [ -n "${MAGIC_SCRIPT_DIR:-}" ] && [ -f "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" ]; then
         cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" | head -1)
     fi
-    
+
     # Fallback to cached registries
     if [ -z "$cmd_meta" ] && [ -f "$REGLIST_FILE" ]; then
         while IFS=':' read -r name url; do
             [ -z "$name" ] && continue
             [ -z "$url" ] && continue
-            [ "${name#\#}" != "$name" ] && continue  # Skip comments
-            
+            [ "${name#\#}" != "$name" ] && continue
+
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
                 cmd_meta=$(grep "^$cmd|" "$reg_file" | head -1)
@@ -566,64 +558,65 @@ get_command_info() {
             fi
         done < "$REGLIST_FILE"
     fi
-    
+
     if [ -z "$cmd_meta" ]; then
         return 1
     fi
-    
-    # Parse command metadata: name|msver_url|description|category
+
+    # Parse command metadata: name|package_url|description|category
+    # package_url can be .mspack (3-tier) or .msver (legacy 2-tier)
     local name=$(echo "$cmd_meta" | cut -d'|' -f1)
-    local msver_url=$(echo "$cmd_meta" | cut -d'|' -f2)
+    local package_url=$(echo "$cmd_meta" | cut -d'|' -f2)
     local description=$(echo "$cmd_meta" | cut -d'|' -f3)
     local category=$(echo "$cmd_meta" | cut -d'|' -f4)
-    
-    # Now get version info from .msver file
-    local version_info=""
-    if [ -n "$msver_url" ]; then
-        version_info=$(download_and_parse_msver "$msver_url" "$cmd" "$version")
+
+    # Download and parse the package/version file
+    local package_info=""
+    if [ -n "$package_url" ]; then
+        package_info=$(download_and_parse_msver "$package_url" "$cmd" "$version")
     fi
-    
-    # Return combined info
-    echo "command_meta|$name|$description|$category|$msver_url"
-    echo "$version_info"
+
+    # Return combined info (command_meta + all meta/dep/config/version lines)
+    echo "command_meta|$name|$description|$category|$package_url"
+    if [ -n "$package_info" ]; then
+        echo "$package_info"
+    fi
 }
 
 # Get all versions for a command
 get_command_versions() {
     local cmd="$1"
-    
-    # Get command metadata first
     local cmd_info=$(get_command_info "$cmd")
-    
+
     if [ -z "$cmd_info" ]; then
         return 1
     fi
-    
-    # Extract .msver URL from command metadata  
-    local msver_url=$(echo "$cmd_info" | grep "^command_meta|" | cut -d'|' -f5)
-    
-    if [ -n "$msver_url" ]; then
-        download_and_parse_msver "$msver_url" "$cmd" | grep "^version|"
-    fi
+
+    echo "$cmd_info" | grep "^version|"
 }
 
 # Get config keys for a specific command
 get_command_config_keys() {
     local cmd="$1"
-    
-    # Get command metadata first
     local cmd_info=$(get_command_info "$cmd")
-    
+
     if [ -z "$cmd_info" ]; then
         return 1
     fi
-    
-    # Extract .msver URL from command metadata
-    local msver_url=$(echo "$cmd_info" | grep "^command_meta|" | cut -d'|' -f5)
-    
-    if [ -n "$msver_url" ]; then
-        download_and_parse_msver "$msver_url" "$cmd" | grep "^config|"
+
+    echo "$cmd_info" | grep "^config|"
+}
+
+# Get metadata for a command (author, license, etc.)
+get_command_metadata() {
+    local cmd="$1"
+    local cmd_info=$(get_command_info "$cmd")
+
+    if [ -z "$cmd_info" ]; then
+        return 1
     fi
+
+    echo "$cmd_info" | grep "^meta|"
 }
 
 # Get registry URL by name
