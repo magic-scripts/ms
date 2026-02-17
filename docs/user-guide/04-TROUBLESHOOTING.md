@@ -55,7 +55,7 @@ ls -la "$HOME/.local/bin/ms/ms"
 If the file does not exist, the installation may be incomplete or corrupted. See [Corrupted Installation](#2-corrupted-installation) or reinstall:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/magicscripts/ms/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 ```
 
 ---
@@ -69,13 +69,13 @@ curl -fsSL https://raw.githubusercontent.com/magicscripts/ms/main/install.sh | s
 If your installation is in a bad state, run the official cleanup script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/magicscripts/ms/main/cleanup.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh | sh
 ```
 
 This removes all Magic Scripts files and allows you to start fresh. After cleanup, reinstall:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/magicscripts/ms/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 ```
 
 ### What Gets Removed
@@ -372,10 +372,10 @@ If all else fails, perform a full reset:
 
 ```sh
 # 1. Remove everything
-curl -fsSL https://raw.githubusercontent.com/magicscripts/ms/main/cleanup.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/cleanup.sh | sh
 
 # 2. Reinstall
-curl -fsSL https://raw.githubusercontent.com/magicscripts/ms/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
 
 # 3. Verify
 ms doctor
