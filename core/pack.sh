@@ -159,6 +159,7 @@ pack_init() {
 
     local upper_name=$(echo "$name" | tr 'a-z' 'A-Z' | tr '-' '_')
     local raw_base="https://raw.githubusercontent.com/magic-scripts/$name/develop"
+    local main_base="https://raw.githubusercontent.com/magic-scripts/$name/main"
 
     echo ""
     echo "${YELLOW}Creating project '$name'...${NC}"
@@ -221,7 +222,7 @@ stability|beta
 min_ms_version|0.0.1
 
 # Version file link
-msver_url|$raw_base/registry/${name}.msver
+msver_url|$main_base/registry/${name}.msver
 
 # Configuration keys
 config|${upper_name}_OPTION|default|Default option value|settings|$name
