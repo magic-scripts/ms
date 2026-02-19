@@ -30,7 +30,7 @@
 pack_init() {
     # Check for help flag first
     if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
-        show_pack_init_help
+        show_pub_pack_init_help
         return 0
     fi
 
@@ -1613,7 +1613,7 @@ pub_reg_remove() {
 handle_pub_pack_version() {
     case "$1" in
         -h|--help|help|"")
-            show_pack_version_help
+            show_pub_pack_version_help
             return 0
             ;;
         add)

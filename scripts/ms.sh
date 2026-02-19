@@ -813,7 +813,7 @@ case "$1" in
         handle_clean "$@"
         ;;
     init)
-        ms_error "'ms init' has been moved" "Use 'ms pack init <name>' instead"
+        ms_error "'ms init' has been moved" "Use 'ms pub pack init <name>' instead"
         exit 1
         ;;
     export)
