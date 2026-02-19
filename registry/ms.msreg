@@ -7,6 +7,6 @@
 
 # Core Commands - pointing to individual .mspack files in registry/ directories
 ms|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.mspack|Magic Scripts main interface|core
-pgadduser|https://raw.githubusercontent.com/magic-scripts/pgadduser/main/registry/pgadduser.mspack|PostgreSQL user and database setup|database
 mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/registry/mschecksum.mspack|SHA256 checksum calculator for Magic Scripts|utilities
+mshello|https://raw.githubusercontent.com/magic-scripts/mshello/main/registry/mshello.mspack|Hello World example for Magic Scripts|examples
 portcheck|https://raw.githubusercontent.com/magic-scripts/portcheck/main/registry/portcheck.mspack|Check and manage processes using specific ports|utilities

@@ -85,6 +85,17 @@ handle_update() {
     fi
     
     if [ $# -eq 0 ]; then
+        # Refresh registry cache before updating
+        if command -v update_registries >/dev/null 2>&1; then
+            printf "  Refreshing registry cache... "
+            if update_registries >/dev/null 2>&1; then
+                printf "${GREEN}done${NC}\n"
+            else
+                printf "${YELLOW}skipped${NC}\n"
+            fi
+            echo ""
+        fi
+
         echo "${YELLOW}Updating all installed commands...${NC}"
         echo ""
         
@@ -150,22 +161,39 @@ handle_update() {
 
             # Check version first
             local installed_version=$(get_installed_version "$cmd")
-            local registry_version=$(get_registry_version "$cmd")
-            local comparison=$(compare_versions "$installed_version" "$registry_version")
-            
-            if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
-                echo "${GREEN}already latest${NC} ($(format_version "$installed_version"))"
-                skipped_count=$((skipped_count + 1))
-                continue
+
+            # dev version: always update to latest dev; stable: check registry version
+            local update_target_version
+            if [ "$installed_version" = "dev" ]; then
+                update_target_version="dev"
+            else
+                local registry_version=$(get_registry_version "$cmd")
+                local comparison=$(compare_versions "$installed_version" "$registry_version")
+                if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
+                    echo "${GREEN}already latest${NC} ($(format_version "$installed_version"))"
+                    skipped_count=$((skipped_count + 1))
+                    continue
+                fi
+                update_target_version="$registry_version"
             fi
-            
-            if command -v get_script_info >/dev/null 2>&1; then
-                script_info=$(get_script_info "$cmd" 2>/dev/null)
-                if [ -n "$script_info" ]; then
-                    file=$(echo "$script_info" | cut -d'|' -f3)
-                    # Force update by passing current registry version
-                    if install_script "$cmd" "$file" "default" "$registry_version" "" "" "" "" "" >/dev/null 2>&1; then
-                        echo "${GREEN}done${NC} ($(format_version "$installed_version") → $(format_version "$registry_version"))"
+
+            if command -v get_command_info >/dev/null 2>&1; then
+                local full_cmd_info=$(get_command_info "$cmd" "$update_target_version" 2>/dev/null)
+                local version_info
+                if [ "$update_target_version" = "dev" ]; then
+                    version_info=$(printf '%s\n' "$full_cmd_info" | grep "^version|dev|" | head -1)
+                else
+                    version_info=$(version_select_latest_stable "$full_cmd_info")
+                fi
+                if [ -n "$version_info" ]; then
+                    local script_url=$(printf '%s\n' "$version_info" | cut -d'|' -f3)
+                    local new_version=$(printf '%s\n' "$version_info" | cut -d'|' -f2)
+                    local install_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f5)
+                    local uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
+                    local update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
+                    local man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
+                    if install_script "$cmd" "$script_url" "default" "$new_version" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" "" >/dev/null 2>&1; then
+                        echo "${GREEN}done${NC} ($(format_version "$installed_version") → $(format_version "$new_version"))"
                         updated_count=$((updated_count + 1))
                     else
                         echo "${RED}failed${NC}"

@@ -368,7 +368,7 @@ install_registry_all() {
         
         # Use get_command_info to get proper script URL from registry system
         local full_cmd_info=$(get_command_info "$cmd" 2>/dev/null)
-        local version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+        local version_info=$(version_select_latest_stable "$full_cmd_info")
         
         local install_result
         if [ -n "$version_info" ]; then
@@ -420,6 +420,7 @@ install_commands_with_detection() {
         # Parse command:version format
         local base_cmd="$cmd"
         local requested_version=""
+        local has_dev_only=""
         if echo "$cmd" | grep -q ':'; then
             base_cmd=$(echo "$cmd" | cut -d':' -f1)
             requested_version=$(echo "$cmd" | cut -d':' -f2)
@@ -459,10 +460,7 @@ install_commands_with_detection() {
                         if [ -n "$requested_version" ]; then
                             version_info=$(echo "$full_cmd_info" | grep "^version|$requested_version|")
                         else
-                            version_info=$(echo "$full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
-                            if [ -z "$version_info" ]; then
-                                version_info=$(echo "$full_cmd_info" | grep "^version|dev|" | head -1)
-                            fi
+                            version_info=$(version_select_latest_stable "$full_cmd_info")
                         fi
 
                         if [ -n "$version_info" ]; then
@@ -484,6 +482,9 @@ $info_line"
                             else
                                 registry_info="$info_line"
                             fi
+                        elif [ -z "$requested_version" ]; then
+                            # Package found in registry but has no stable version
+                            has_dev_only="$registry_name"
                         fi
                     fi
                 fi
@@ -501,6 +502,9 @@ $info_line"
             printf "  Installing ${CYAN}%s${NC}... " "$base_cmd"
             if [ -n "$requested_version" ]; then
                 echo "${RED}version $requested_version not found in any registry${NC}"
+            elif [ -n "$has_dev_only" ]; then
+                echo "${YELLOW}skipped${NC}"
+                echo "    No stable release available. Use ${CYAN}ms install ${base_cmd}:dev${NC} to install the dev version."
             else
                 echo "${RED}not found in any registry${NC}"
             fi
@@ -520,16 +524,17 @@ $info_line"
             printf " from ${YELLOW}%s${NC}... " "$target_registry"
 
             if [ "$found_version" = "dev" ] && [ -z "$requested_version" ]; then
-                echo ""
-                echo "    ${YELLOW}⚠️  Installing development version (no stable release available)${NC}"
-                printf "    "
+                echo "${YELLOW}skipped${NC}"
+                echo "    No stable release available. Use ${CYAN}ms install ${base_cmd}:dev${NC} to install the dev version."
+                failed_count=$((failed_count + 1))
+                continue
             fi
 
             local full_cmd_info=$(get_command_info "$base_cmd" "$found_version" 2>/dev/null)
             local version_info=$(echo "$full_cmd_info" | grep "^version|$found_version|" | head -1)
 
             if [ -z "$version_info" ]; then
-                version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+                version_info=$(version_select_latest_stable "$full_cmd_info")
             fi
 
             local install_result
@@ -589,16 +594,17 @@ EOF
                 printf " from ${YELLOW}%s${NC}... " "$target_registry"
 
                 if [ "$found_version" = "dev" ] && [ -z "$requested_version" ]; then
-                    echo ""
-                    echo "    ${YELLOW}⚠️  Installing development version (no stable release available)${NC}"
-                    printf "    "
+                    echo "${YELLOW}skipped${NC}"
+                    echo "    No stable release available. Use ${CYAN}ms install ${base_cmd}:dev${NC} to install the dev version."
+                    failed_count=$((failed_count + 1))
+                    continue
                 fi
 
                 local full_cmd_info=$(get_command_info "$base_cmd" "$found_version" 2>/dev/null)
                 local version_info=$(echo "$full_cmd_info" | grep "^version|$found_version|" | head -1)
 
                 if [ -z "$version_info" ]; then
-                    version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+                    version_info=$(version_select_latest_stable "$full_cmd_info")
                 fi
 
                 local install_result
@@ -731,7 +737,7 @@ $1"
                 if [ -n "$full_cmd_info" ]; then
                     # Parse command metadata and version info from get_command_info output
                     local cmd_meta=$(echo "$full_cmd_info" | grep "^command_meta|")
-                    local version_info=$(echo "$full_cmd_info" | grep "^version|" | head -1)
+                    local version_info=$(version_select_latest_stable "$full_cmd_info")
 
                     if [ -n "$version_info" ]; then
                         printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"

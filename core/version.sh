@@ -62,6 +62,22 @@ version_get_registry() {
     fi
 }
 
+# Select latest stable version line from msver content (excludes dev)
+# Args: versions_text (multiline containing "version|x.y.z|..." lines)
+# Returns: full version line of latest stable, empty string if none exists
+version_select_latest_stable() {
+    local versions_text="$1"
+    local non_dev
+    non_dev=$(printf '%s\n' "$versions_text" | grep "^version|" | grep -v "^version|dev|")
+    [ -z "$non_dev" ] && return 1
+    local latest_name
+    latest_name=$(printf '%s\n' "$non_dev" | \
+        sed 's/^version|\([^|]*\)|.*/\1/' | \
+        sort -t. -k1,1n -k2,2n -k3,3n | \
+        tail -1)
+    printf '%s\n' "$non_dev" | grep "^version|${latest_name}|" | head -1
+}
+
 # Compare two versions
 # Args: installed_version registry_version
 # Returns: "same" or "update_needed"
