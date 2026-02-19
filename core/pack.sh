@@ -27,6 +27,73 @@
 #   - ms.sh functions: ms_error(), get_config_value(), calculate_file_checksum()
 #
 
+# Check git global identity (warn only, non-fatal)
+_pack_check_git_config() {
+    local git_name git_email
+    git_name=$(git config --global user.name 2>/dev/null)
+    git_email=$(git config --global user.email 2>/dev/null)
+    if [ -z "$git_name" ] || [ -z "$git_email" ]; then
+        echo ""
+        echo "${YELLOW}Warning: git identity not fully configured.${NC}"
+        [ -z "$git_name" ] && echo "  Run: git config --global user.name \"Your Name\""
+        [ -z "$git_email" ] && echo "  Run: git config --global user.email \"you@example.com\""
+    fi
+}
+
+# Test SSH connectivity to the remote host (warn only, non-fatal)
+_pack_check_ssh_remote() {
+    local url="$1"
+    case "$url" in
+        git@*)
+            local host
+            host=$(printf '%s' "$url" | sed 's/git@\([^:]*\):.*/\1/')
+            printf "  Checking SSH access to %s... " "$host"
+            local ssh_out
+            ssh_out=$(ssh -T "git@$host" \
+                -o ConnectTimeout=5 \
+                -o StrictHostKeyChecking=accept-new \
+                -o BatchMode=yes 2>&1)
+            if printf '%s' "$ssh_out" | grep -qi "successfully authenticated\|hi "; then
+                echo "${GREEN}OK${NC}"
+            else
+                echo "${YELLOW}warning${NC}"
+                if printf '%s' "$ssh_out" | grep -qi "permission denied\|publickey"; then
+                    echo "  SSH key not authorized. Run: ssh -T git@$host"
+                elif printf '%s' "$ssh_out" | grep -qi "could not resolve\|connection refused\|timed out"; then
+                    echo "  Cannot reach $host. Check your network connection."
+                else
+                    echo "  SSH test inconclusive. Proceeding with push attempt."
+                fi
+            fi
+            ;;
+    esac
+}
+
+# Push a branch to origin with error diagnosis ($1=branch $2=project_dir)
+_pack_push_branch() {
+    local branch="$1"
+    local proj="$2"
+    printf "  Pushing %b%s%b... " "${CYAN}" "$branch" "${NC}"
+    local push_out push_exit
+    push_out=$(git push -u origin "$branch" 2>&1); push_exit=$?
+    if [ "$push_exit" -eq 0 ]; then
+        echo "${GREEN}OK${NC}"
+        return 0
+    fi
+    echo "${RED}failed${NC}"
+    if printf '%s' "$push_out" | grep -qi "permission denied\|publickey"; then
+        echo "    SSH key not authorized. Run: ssh -T git@github.com"
+    elif printf '%s' "$push_out" | grep -qi "repository not found\|does not exist\|not found"; then
+        echo "    Repository not found on remote. Create it first, then:"
+        echo "    cd $proj && git push -u origin $branch"
+    elif printf '%s' "$push_out" | grep -qi "could not resolve\|unable to connect\|timed out"; then
+        echo "    Network error. Check your internet connection."
+    else
+        printf "    %s\n" "$push_out"
+    fi
+    return 1
+}
+
 pack_init() {
     # Check for help flag first
     if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
@@ -145,7 +212,7 @@ pack_init() {
         fi
 
         if [ -z "$remote_url" ]; then
-            printf "Remote repository URL (optional, press enter to skip): "
+            printf "GitHub SSH URL [${CYAN}e.g. git@github.com:org/%s.git${NC}] (optional): " "$name"
             read -r remote_url < /dev/tty
         fi
     else
@@ -273,6 +340,8 @@ GITIGNORE_EOF
 
     # Git setup
     if command -v git >/dev/null 2>&1; then
+        _pack_check_git_config
+
         local orig_dir="$(pwd)"
         cd "$name"
         git init -q
@@ -280,37 +349,49 @@ GITIGNORE_EOF
         git commit -q -m "init: scaffold $name project"
         git checkout -q -b develop
 
-        # Add remote if provided
+        echo ""
+        echo "${GREEN}Git initialized with branches:${NC}"
+        echo "  ${CYAN}main${NC}     <- initial commit"
+        echo "  ${CYAN}develop${NC}  <- current branch (active development)"
+
+        # Remote setup and push
         if [ -n "$remote_url" ]; then
-            git remote add origin "$remote_url"
             echo ""
-            echo "${GREEN}Git initialized with branches and remote:${NC}"
-            echo "  ${CYAN}main${NC}     <- initial commit"
-            echo "  ${CYAN}develop${NC}  <- current branch (active development)"
+            _pack_check_ssh_remote "$remote_url"
+
+            if git remote | grep -q "^origin$"; then
+                echo "  ${YELLOW}Note: remote 'origin' already exists, updating URL${NC}"
+                git remote set-url origin "$remote_url"
+            else
+                git remote add origin "$remote_url"
+            fi
             echo "  ${CYAN}origin${NC}   <- $remote_url"
+
             echo ""
             echo "${YELLOW}Pushing to remote...${NC}"
-
             local push_failed=false
-            if ! git push -u origin main 2>/dev/null; then
-                echo "  ${YELLOW}Warning: Failed to push main${NC}"
-                push_failed=true
-            fi
-            if ! git push -u origin develop 2>/dev/null; then
-                echo "  ${YELLOW}Warning: Failed to push develop${NC}"
-                push_failed=true
-            fi
+            _pack_push_branch main "$name"    || push_failed=true
+            _pack_push_branch develop "$name" || push_failed=true
 
             if [ "$push_failed" = false ]; then
-                echo "${GREEN}Successfully pushed to remote!${NC}"
+                echo "${GREEN}All branches pushed successfully.${NC}"
+
+                # Set GitHub repo description via gh CLI if available
+                if command -v gh >/dev/null 2>&1 && [ -n "$description" ]; then
+                    local gh_repo
+                    gh_repo=$(printf '%s' "$remote_url" | sed 's/git@[^:]*:\(.*\)\.git$/\1/')
+                    if [ -n "$gh_repo" ]; then
+                        printf "  Setting GitHub repo description... "
+                        if gh repo edit "$gh_repo" --description "$description" 2>/dev/null; then
+                            echo "${GREEN}OK${NC}"
+                        else
+                            echo "${YELLOW}skipped (gh not authenticated or insufficient permissions)${NC}"
+                        fi
+                    fi
+                fi
             else
-                echo "${YELLOW}Note: You may need to create the remote repository first${NC}"
+                echo "${YELLOW}Some pushes failed. Fix the issues above and push manually.${NC}"
             fi
-        else
-            echo ""
-            echo "${GREEN}Git initialized with branches:${NC}"
-            echo "  ${CYAN}main${NC}     <- initial commit"
-            echo "  ${CYAN}develop${NC}  <- current branch (active development)"
         fi
 
         cd "$orig_dir"
@@ -323,8 +404,8 @@ GITIGNORE_EOF
     echo "Next steps:"
     echo "  1. ${CYAN}cd $name${NC}"
     echo "  2. Edit ${CYAN}scripts/${name}.sh${NC} with your command logic"
-    echo "  3. ${CYAN}ms pack verify registry/${NC}"
-    echo "  4. ${CYAN}ms pack release registry/ 0.1.0${NC}"
+    echo "  3. ${CYAN}ms pub pack verify registry/${NC}"
+    echo "  4. ${CYAN}ms pub pack release registry/ 0.1.0${NC}"
 }
 # ============================================================================
 # Pack Tools (ms pack)
@@ -345,12 +426,12 @@ show_pub_pack_release_help() {
     echo ""
     echo "${YELLOW}Options:${NC}"
     echo "  ${GREEN}--checksum-from <file>${NC}  Script file path (auto-detects if not specified)"
-    echo "  ${GREEN}--push${NC}                  Push all branches to origin"
+    echo "  ${GREEN}--no-push${NC}               Skip pushing branches to origin (push is on by default)"
     echo "  ${GREEN}--no-git${NC}                Skip git operations (only update .msver)"
     echo ""
     echo "${YELLOW}Examples:${NC}"
     echo "  ${CYAN}ms pack release registry/ 1.0.0${NC}"
-    echo "  ${CYAN}ms pack release registry/ 1.0.0 --push${NC}"
+    echo "  ${CYAN}ms pack release registry/ 1.0.0 --no-push${NC}"
     echo "  ${CYAN}ms pack release registry/ 1.0.0 --no-git${NC}"
     echo "  ${CYAN}ms pack release registry/ 1.0.0 --checksum-from scripts/foo.sh${NC}"
     echo ""
@@ -363,29 +444,29 @@ show_pub_pack_release_help() {
     echo "  5. Create ${CYAN}release/v<version>${NC} branch + commit"
     echo "  6. Merge to ${CYAN}main${NC}"
     echo "  7. Return to ${CYAN}develop${NC} and sync from main"
-    echo "  8. [--push] Push release, main, develop to origin"
+    echo "  8. Push release, main, develop to origin [skip with --no-push]"
 }
 
 pack_release() {
     local registry_dir=""
     local version=""
     local checksum_from=""
-    local do_push=false
+    local do_push=true
     local no_git=false
 
     # Parse arguments
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help|help)
-                show_pack_release_help
+                show_pub_pack_release_help
                 return 0
                 ;;
             --checksum-from)
                 shift
                 checksum_from="$1"
                 ;;
-            --push)
-                do_push=true
+            --no-push)
+                do_push=false
                 ;;
             --no-git)
                 no_git=true
@@ -647,7 +728,7 @@ show_pub_pack_help() {
     echo "  ${CYAN}ms pub pack version add registry/foo.msver 1.0.0 scripts/foo.sh${NC}"
     echo "  ${CYAN}ms pub pack version update registry/foo.msver 1.0.0 --checksum-from scripts/foo.sh${NC}"
     echo "  ${CYAN}ms pub pack verify registry/${NC}"
-    echo "  ${CYAN}ms pub pack release registry/ 1.0.0 --push${NC}"
+    echo "  ${CYAN}ms pub pack release registry/ 1.0.0${NC}"
     echo ""
     echo "Run ${CYAN}ms pub pack <command> --help${NC} for detailed usage of each command."
 }

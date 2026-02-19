@@ -4,7 +4,7 @@
 # Package metadata
 name|ms
 description|Magic Scripts main CLI - install, manage, and run developer automation scripts
-author|Magic Scripts Team <team@magic-scripts.dev>
+author|nulLeeKH <nulleekh@gmail.com>
 license|MIT
 license_url|https://github.com/magic-scripts/ms/blob/main/LICENSE
 repo_url|https://github.com/magic-scripts/ms
