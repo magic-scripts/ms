@@ -151,24 +151,24 @@ handle_update() {
             printf "  Updating ${CYAN}%s${NC}... " "$cmd"
 
             # Check if pinned
-            local is_pinned=$(get_installation_metadata "$cmd" "pinned")
+            local is_pinned=$(metadata_get "$cmd" "pinned")
             if [ "$is_pinned" = "true" ]; then
-                local pinned_ver=$(get_installed_version "$cmd")
+                local pinned_ver=$(version_get_installed "$cmd")
                 echo "${YELLOW}pinned${NC} ($(format_version "$pinned_ver"))"
                 skipped_count=$((skipped_count + 1))
                 continue
             fi
 
             # Check version first
-            local installed_version=$(get_installed_version "$cmd")
+            local installed_version=$(version_get_installed "$cmd")
 
             # dev version: always update to latest dev; stable: check registry version
             local update_target_version
             if [ "$installed_version" = "dev" ]; then
                 update_target_version="dev"
             else
-                local registry_version=$(get_registry_version "$cmd")
-                local comparison=$(compare_versions "$installed_version" "$registry_version")
+                local registry_version=$(version_get_registry "$cmd")
+                local comparison=$(version_compare "$installed_version" "$registry_version")
                 if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
                     echo "${GREEN}already latest${NC} ($(format_version "$installed_version"))"
                     skipped_count=$((skipped_count + 1))
@@ -292,9 +292,16 @@ handle_update() {
         return
     fi
     
-    # Update specific command
-    local cmd="$1"
-    
+    # Update specific command — support cmd:version syntax
+    local base_cmd="$1"
+    local requested_version=""
+    if echo "$1" | grep -q ':'; then
+        base_cmd=$(echo "$1" | cut -d':' -f1)
+        requested_version=$(echo "$1" | cut -d':' -f2)
+        [ "$requested_version" = "latest" ] && requested_version=""
+    fi
+    local cmd="$base_cmd"
+
     # Check if command is installed
     if [ ! -f "$HOME/.local/bin/ms/$cmd" ]; then
         echo "${RED}Error: Command '$cmd' is not installed${NC}"
@@ -304,45 +311,113 @@ handle_update() {
         echo "  ${CYAN}ms search $cmd${NC}      # Search for the command"
         exit 1
     fi
-    
-    # Check version first
-    local installed_version=$(get_installed_version "$cmd")
-    local registry_version=$(get_registry_version "$cmd")
-    local comparison=$(compare_versions "$installed_version" "$registry_version")
-    
+
+    local installed_version=$(version_get_installed "$cmd")
+
+    if [ -n "$requested_version" ]; then
+        # Specific version requested — force-install that version
+        echo "${YELLOW}Updating $cmd to version $requested_version...${NC}"
+        echo "  Installed: $installed_version"
+        echo "  Target:    $requested_version"
+        echo ""
+
+        if ! command -v get_command_info >/dev/null 2>&1; then
+            echo "${RED}Error: Registry system not available${NC}"
+            exit 1
+        fi
+
+        local full_cmd_info
+        full_cmd_info=$(get_command_info "$cmd" "$requested_version" 2>/dev/null)
+        local version_info
+        if [ "$requested_version" = "dev" ]; then
+            version_info=$(printf '%s\n' "$full_cmd_info" | grep "^version|dev|" | head -1)
+        else
+            version_info=$(printf '%s\n' "$full_cmd_info" | grep "^version|${requested_version}|" | head -1)
+        fi
+
+        if [ -z "$version_info" ]; then
+            echo "${RED}Error: Version '$requested_version' not found for '$cmd'${NC}"
+            echo "Run ${CYAN}ms versions $cmd${NC} to see available versions"
+            exit 1
+        fi
+
+        local script_url
+        local install_hook
+        local uninstall_hook
+        local update_hook
+        local man_url
+        script_url=$(printf '%s\n' "$version_info" | cut -d'|' -f3)
+        install_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f5)
+        uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
+        update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
+        man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
+
+        printf "  Updating ${CYAN}%s${NC}:${CYAN}%s${NC}... " "$cmd" "$requested_version"
+        if install_script "$cmd" "$script_url" "default" "$requested_version" "force" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url"; then
+            echo "${GREEN}done${NC}"
+            echo "${GREEN}✓ $cmd updated ($(format_version "$installed_version") → $(format_version "$requested_version"))${NC}"
+        else
+            echo "${RED}failed${NC}"
+            echo "${RED}Error: Failed to update $cmd${NC}"
+            exit 1
+        fi
+        return
+    fi
+
+    # No version specified — check registry and update if newer available
+    local registry_version
+    registry_version=$(version_get_registry "$cmd")
+    local comparison
+    comparison=$(version_compare "$installed_version" "$registry_version")
+
     echo "${YELLOW}Checking $cmd version...${NC}"
     echo "  Installed: $installed_version"
     echo "  Registry:  $registry_version"
-    
+
     if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
         echo "${GREEN}✓ $cmd is already up to date ($(format_version "$installed_version"))${NC}"
-        echo "Use ${CYAN}ms install $cmd --force${NC} to reinstall"
+        echo "Use ${CYAN}ms reinstall $cmd${NC} to reinstall"
         return
     fi
-    
+
     echo ""
     echo "${YELLOW}Updating $cmd...${NC}"
-    
-    # Get script info from registry
-    if command -v get_script_info >/dev/null 2>&1; then
-        script_info=$(get_script_info "$cmd" 2>/dev/null)
-        if [ -n "$script_info" ]; then
-            file=$(echo "$script_info" | cut -d'|' -f3)
-            printf "  Updating ${CYAN}%s${NC}... " "$cmd"
-            if install_script "$cmd" "$file" "default" "$registry_version" "" "" "" "" ""; then
-                echo "${GREEN}done${NC}"
-                echo "Successfully updated $cmd ($(format_version "$installed_version") → $(format_version "$registry_version"))"
-            else
-                echo "${RED}failed${NC}"
-                echo "${RED}Error: Failed to update $cmd${NC}"
-                exit 1
-            fi
-        else
-            ms_error "Command '$cmd' not found in registry" "Run 'ms upgrade' to update registries"
-            exit 1
-        fi
-    else
+
+    if ! command -v get_command_info >/dev/null 2>&1; then
         echo "${RED}Error: Registry system not available${NC}"
+        exit 1
+    fi
+
+    local full_cmd_info
+    full_cmd_info=$(get_command_info "$cmd" 2>/dev/null)
+    local version_info
+    version_info=$(version_select_latest_stable "$full_cmd_info")
+
+    if [ -z "$version_info" ]; then
+        ms_error "Command '$cmd' not found in registry" "Run 'ms upgrade' to update registries"
+        exit 1
+    fi
+
+    local script_url
+    local new_version
+    local install_hook
+    local uninstall_hook
+    local update_hook
+    local man_url
+    script_url=$(printf '%s\n' "$version_info" | cut -d'|' -f3)
+    new_version=$(printf '%s\n' "$version_info" | cut -d'|' -f2)
+    install_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f5)
+    uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
+    update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
+    man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
+
+    printf "  Updating ${CYAN}%s${NC}... " "$cmd"
+    if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url"; then
+        echo "${GREEN}done${NC}"
+        echo "${GREEN}✓ Successfully updated $cmd ($(format_version "$installed_version") → $(format_version "$new_version"))${NC}"
+    else
+        echo "${RED}failed${NC}"
+        echo "${RED}Error: Failed to update $cmd${NC}"
         exit 1
     fi
 }

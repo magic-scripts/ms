@@ -763,7 +763,9 @@ case "$1" in
             exit 1
         fi
         if [ "$1" = "ms" ]; then
-            handle_ms_force_reinstall
+            echo "${RED}Error: Cannot reinstall 'ms' — the tool cannot reinstall itself while running.${NC}"
+            echo "To update Magic Scripts, use: ${CYAN}ms update ms${NC}"
+            exit 1
         else
             for _reinstall_cmd in "$@"; do
                 _ri_full_cmd_info=$(get_command_info "$_reinstall_cmd" 2>/dev/null)
@@ -778,6 +780,12 @@ case "$1" in
                 if [ -z "$_ri_version_info" ]; then
                     ms_error "No version available for '$_reinstall_cmd'"
                     continue
+                fi
+                # Run uninstall hook from existing metadata before reinstalling
+                _ri_existing_uninstall=$(metadata_get "$_reinstall_cmd" "uninstall_script" 2>/dev/null)
+                if [ -n "$_ri_existing_uninstall" ] && [ "$_ri_existing_uninstall" != "unknown" ] && [ "$_ri_existing_uninstall" != "" ]; then
+                    echo "  ${CYAN}Running uninstall hook for $_reinstall_cmd...${NC}"
+                    execute_hook "$_ri_existing_uninstall" "$_reinstall_cmd"
                 fi
                 # Get registry_name from existing .msmeta file
                 _ri_registry_name=""

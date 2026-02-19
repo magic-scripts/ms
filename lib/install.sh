@@ -440,6 +440,14 @@ install_commands_with_detection() {
             continue
         fi
 
+        # Block if already installed
+        if [ -f "$HOME/.local/bin/ms/$base_cmd" ]; then
+            printf "  ${CYAN}%-20s${NC}  already installed\n" "$base_cmd"
+            printf "    Use '${CYAN}ms update %s${NC}' to upgrade, or '${CYAN}ms reinstall %s${NC}' to reinstall\n" \
+                "$base_cmd" "$base_cmd"
+            continue
+        fi
+
         # Find command in registries using registry system
         # Use newline-separated strings instead of bash arrays
         local found_registries=""
@@ -729,6 +737,14 @@ $1"
                 printf "  Installing ${CYAN}%s${NC}... " "$cmd"
                 echo "${YELLOW}already installed${NC}"
                 echo "  Use ${CYAN}ms reinstall ms${NC} to reinstall"
+                continue
+            fi
+
+            # Block if already installed
+            if [ -f "$HOME/.local/bin/ms/$cmd" ]; then
+                printf "  ${CYAN}%-20s${NC}  already installed\n" "$cmd"
+                printf "    Use '${CYAN}ms update %s${NC}' to upgrade, or '${CYAN}ms reinstall %s${NC}' to reinstall\n" \
+                    "$cmd" "$cmd"
                 continue
             fi
 
