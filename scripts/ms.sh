@@ -42,6 +42,14 @@ done
 
 # Version
 VERSION="dev"
+# Auto-detect installed version from msmeta if not injected by wrapper
+if [ -z "${MS_INSTALLED_VERSION}" ]; then
+    _ms_meta_ver=$(grep '^version=' "$HOME/.local/share/magicscripts/installed/ms.msmeta" 2>/dev/null | cut -d'=' -f2)
+    if [ -n "$_ms_meta_ver" ] && [ "$_ms_meta_ver" != "dev" ]; then
+        MS_INSTALLED_VERSION="$_ms_meta_ver"
+    fi
+    unset _ms_meta_ver
+fi
 
 # Colors
 RED='\033[0;31m'

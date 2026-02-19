@@ -49,17 +49,19 @@ version_set_installed() {
 # Returns: version string or "unknown"
 version_get_registry() {
     local cmd="$1"
-    if command -v get_script_info >/dev/null 2>&1; then
-        local script_info=$(get_script_info "$cmd" 2>/dev/null)
-        if [ -n "$script_info" ]; then
-            # Extract version from script_info (format: command|cmd|uri|desc|category|version|checksum)
-            echo "$script_info" | cut -d'|' -f6
-        else
-            echo "unknown"
+    if command -v get_command_info >/dev/null 2>&1; then
+        local cmd_info
+        cmd_info=$(get_command_info "$cmd" 2>/dev/null)
+        if [ -n "$cmd_info" ]; then
+            local latest_line
+            latest_line=$(version_select_latest_stable "$cmd_info")
+            if [ -n "$latest_line" ]; then
+                echo "$latest_line" | cut -d'|' -f2
+                return 0
+            fi
         fi
-    else
-        echo "unknown"
     fi
+    echo "unknown"
 }
 
 # Select latest stable version line from msver content (excludes dev)

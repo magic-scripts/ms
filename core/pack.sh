@@ -718,6 +718,27 @@ pack_release() {
             ${man_url:+--man "$man_url"}
     fi
 
+    # Reorder msver: comments first, then dev entry, then versions newest-first
+    local tmp_msver="${msver_file}.tmp"
+    local msver_comments
+    msver_comments=$(grep '^#' "$msver_file" 2>/dev/null)
+    local msver_dev_line
+    msver_dev_line=$(grep '^version|dev|' "$msver_file" | head -1)
+    local msver_version_lines
+    msver_version_lines=$(grep '^version|' "$msver_file" | grep -v '^version|dev|')
+    local msver_sorted
+    msver_sorted=$(printf '%s\n' "$msver_version_lines" | \
+        awk -F'|' 'NF>1{print $2, $0}' | \
+        sort -t. -k1,1rn -k2,2rn -k3,3rn | \
+        sed 's/^[^ ]* //')
+    {
+        [ -n "$msver_comments" ] && printf '%s\n' "$msver_comments"
+        [ -n "$msver_dev_line" ] && printf '%s\n' "$msver_dev_line"
+        [ -n "$msver_sorted" ] && printf '%s\n' "$msver_sorted"
+    } > "$tmp_msver" && mv "$tmp_msver" "$msver_file"
+    echo "  ${GREEN}Reordered: dev first, versions newest-to-oldest${NC}"
+    echo ""
+
     # Step 4-7: Git workflow (skip if --no-git)
     if [ "$no_git" = false ]; then
         # Step 4: Create release branch
@@ -728,7 +749,7 @@ pack_release() {
             return 1
         fi
         git add -A 2>/dev/null
-        if ! git commit -m "release: v${version}" 2>/dev/null; then
+        if ! git commit -m "rel: v${version}" 2>/dev/null; then
             echo "  ${YELLOW}No changes to commit${NC}"
         fi
         echo "  Created branch: ${GREEN}$branch_name${NC}"

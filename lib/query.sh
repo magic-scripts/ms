@@ -222,13 +222,13 @@ handle_list() {
         cmd_name=$(basename "$cmd_file")
 
         local installed
-        installed=$(get_installed_version "$cmd_name")
+        installed=$(version_get_installed "$cmd_name")
         local latest
-        latest=$(get_registry_version "$cmd_name")
+        latest=$(version_get_registry "$cmd_name")
         local is_pinned
-        is_pinned=$(get_installation_metadata "$cmd_name" "pinned")
+        is_pinned=$(metadata_get "$cmd_name" "pinned")
         local comparison
-        comparison=$(compare_versions "$installed" "$latest")
+        comparison=$(version_compare "$installed" "$latest")
 
         if [ "$latest" = "unknown" ]; then
             printf "  ${CYAN}%-20s${NC}  ${BLUE}%-10s${NC}   %-10s  ?\n" \
