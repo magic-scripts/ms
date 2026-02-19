@@ -327,6 +327,55 @@ UNINSTALL_EOF
 .DS_Store
 GITIGNORE_EOF
 
+    # README.md
+    cat > "$name/README.md" << README_EOF
+# $name
+
+$description
+
+## Installation
+
+Requires [Magic Scripts](https://github.com/magic-scripts/ms):
+
+\`\`\`sh
+curl -fsSL https://raw.githubusercontent.com/magic-scripts/ms/main/setup.sh | sh
+ms install $name
+\`\`\`
+
+## Usage
+
+\`\`\`sh
+$name --help
+\`\`\`
+
+## License
+
+$license
+README_EOF
+
+    # LICENSE
+    cat > "$name/LICENSE" << 'LICENSE_EOF'
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+LICENSE_EOF
+
     echo ""
     echo "${GREEN}Created project '$name':${NC}"
     echo "  $name/"
@@ -336,6 +385,8 @@ GITIGNORE_EOF
     echo "  ├── installer/install.sh"
     echo "  ├── installer/uninstall.sh"
     echo "  ├── man/"
+    echo "  ├── README.md"
+    echo "  ├── LICENSE"
     echo "  └── .gitignore"
 
     # Git setup
@@ -376,19 +427,23 @@ GITIGNORE_EOF
             if [ "$push_failed" = false ]; then
                 echo "${GREEN}All branches pushed successfully.${NC}"
 
-                # Set GitHub repo description via gh CLI if available
-                if command -v gh >/dev/null 2>&1 && [ -n "$description" ]; then
-                    local gh_repo
-                    gh_repo=$(printf '%s' "$remote_url" | sed 's/git@[^:]*:\(.*\)\.git$/\1/')
-                    if [ -n "$gh_repo" ]; then
-                        printf "  Setting GitHub repo description... "
-                        if gh repo edit "$gh_repo" --description "$description" 2>/dev/null; then
-                            echo "${GREEN}OK${NC}"
-                        else
-                            echo "${YELLOW}skipped (gh not authenticated or insufficient permissions)${NC}"
+                # Set GitHub repo description via gh CLI (only for GitHub URLs)
+                case "$remote_url" in
+                    git@github.com:*|https://github.com/*)
+                        if command -v gh >/dev/null 2>&1 && [ -n "$description" ]; then
+                            local gh_repo
+                            gh_repo=$(printf '%s' "$remote_url" | sed 's|git@github\.com:||; s|https://github\.com/||; s|\.git$||')
+                            if [ -n "$gh_repo" ]; then
+                                printf "  Setting GitHub repo description... "
+                                if gh repo edit "$gh_repo" --description "$description — MS command" 2>/dev/null; then
+                                    echo "${GREEN}OK${NC}"
+                                else
+                                    echo "${YELLOW}skipped (gh not authenticated or insufficient permissions)${NC}"
+                                fi
+                            fi
                         fi
-                    fi
-                fi
+                        ;;
+                esac
             else
                 echo "${YELLOW}Some pushes failed. Fix the issues above and push manually.${NC}"
             fi
