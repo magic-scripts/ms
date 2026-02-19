@@ -436,7 +436,7 @@ install_commands_with_detection() {
         if [ "$base_cmd" = "ms" ]; then
             printf "  Installing ${CYAN}%s${NC}... " "$cmd"
             echo "${YELLOW}already installed${NC}"
-            echo "  Use ${CYAN}ms reinstall ms${NC} to reinstall"
+            echo "  Use ${CYAN}ms update ms${NC} to update"
             continue
         fi
 
@@ -736,7 +736,7 @@ $1"
             if [ "$cmd" = "ms" ]; then
                 printf "  Installing ${CYAN}%s${NC}... " "$cmd"
                 echo "${YELLOW}already installed${NC}"
-                echo "  Use ${CYAN}ms reinstall ms${NC} to reinstall"
+                echo "  Use ${CYAN}ms update ms${NC} to update"
                 continue
             fi
 

@@ -768,6 +768,10 @@ case "$1" in
             exit 1
         else
             for _reinstall_cmd in "$@"; do
+                if [ "$_reinstall_cmd" = "ms" ]; then
+                    echo "${YELLOW}Skipping ms — use '${CYAN}ms update ms${YELLOW}' instead${NC}"
+                    continue
+                fi
                 _ri_full_cmd_info=$(get_command_info "$_reinstall_cmd" 2>/dev/null)
                 if [ -z "$_ri_full_cmd_info" ]; then
                     ms_error "Command '$_reinstall_cmd' not found in any registry" "ms upgrade"
@@ -789,7 +793,7 @@ case "$1" in
                 fi
                 # Get registry_name from existing .msmeta file
                 _ri_registry_name=""
-                _ri_meta_file="$MAGIC_DATA_DIR/installed/${_reinstall_cmd}.msmeta"
+                _ri_meta_file="$MAGIC_SCRIPT_DIR/installed/${_reinstall_cmd}.msmeta"
                 if [ -f "$_ri_meta_file" ]; then
                     _ri_registry_name=$(grep "^registry_name=" "$_ri_meta_file" 2>/dev/null | cut -d'=' -f2-)
                 fi

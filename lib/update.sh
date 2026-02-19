@@ -192,7 +192,7 @@ handle_update() {
                     local uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
                     local update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
                     local man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
-                    if install_script "$cmd" "$script_url" "default" "$new_version" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" "" >/dev/null 2>&1; then
+                    if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" >/dev/null 2>&1; then
                         echo "${GREEN}done${NC} ($(format_version "$installed_version") → $(format_version "$new_version"))"
                         updated_count=$((updated_count + 1))
                     else
@@ -301,6 +301,15 @@ handle_update() {
         [ "$requested_version" = "latest" ] && requested_version=""
     fi
     local cmd="$base_cmd"
+
+    # Redirect ms to its special update path (no version spec support)
+    if [ "$base_cmd" = "ms" ]; then
+        if [ -n "$requested_version" ]; then
+            echo "${YELLOW}Note: ms update does not support version specification. Running standard ms update.${NC}"
+        fi
+        handle_update "ms"
+        return
+    fi
 
     # Check if command is installed
     if [ ! -f "$HOME/.local/bin/ms/$cmd" ]; then
