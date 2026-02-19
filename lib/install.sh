@@ -194,6 +194,9 @@ install_script() {
     cat > "$INSTALL_DIR/$cmd" << EOF
 #!/bin/sh
 MAGIC_SCRIPT_DIR="$MAGIC_DATA_DIR"
+_ms_ver=\$(grep '^version=' "$MAGIC_DATA_DIR/installed/$cmd.msmeta" 2>/dev/null | cut -d'=' -f2)
+MS_INSTALLED_VERSION=\${_ms_ver:-dev}
+export MS_INSTALLED_VERSION
 exec "$target_script" "\$@"
 EOF
     chmod 755 "$INSTALL_DIR/$cmd"

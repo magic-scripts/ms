@@ -76,7 +76,7 @@ show_banner() {
     echo "${MAGENTA}║             ${CYAN}Magic Scripts${MAGENTA}             ║${NC}"
     echo "${MAGENTA}║      ${YELLOW}Developer Automation Tools${MAGENTA}       ║${NC}"
     echo "${MAGENTA}╚═══════════════════════════════════════╝${NC}"
-    echo "${BLUE}Version: $(format_version "$VERSION")${NC}"
+    echo "${BLUE}Version: $(format_version "${MS_INSTALLED_VERSION:-$VERSION}")${NC}"
     echo ""
 }
 
@@ -104,6 +104,7 @@ show_help() {
     echo "  ${GREEN}reg remove <name>${NC}       Remove a registry"
     echo ""
     echo "${YELLOW}Package Management:${NC}"
+    echo "  ${GREEN}list${NC}                    List installed commands with version info"
     echo "  ${GREEN}install <commands...>${NC}   Install specific commands (use cmd:version for versions)"
     echo "  ${GREEN}install -r <registry>${NC}   Install all commands from a registry"
     echo "  ${GREEN}update${NC}                  Update all installed commands and Magic Scripts"
@@ -226,7 +227,7 @@ suggest_similar_command() {
             echo "uninstall"
             ;;
         list|ls)
-            echo "search"
+            echo "list"
             ;;
         find)
             echo "search"
@@ -289,7 +290,7 @@ suggest_similar_command() {
             echo "help"
             ;;
         *)
-            for cmd in help version status doctor upgrade search install uninstall update versions reinstall info config reg pub outdated which pin unpin clean export import run; do
+            for cmd in help version status doctor upgrade search list install uninstall update versions reinstall info config reg pub outdated which pin unpin clean export import run; do
                 case "$cmd" in
                     *"$input"*|"$input"*)
                         echo "$cmd"
@@ -791,6 +792,10 @@ case "$1" in
                 fi
             done
         fi
+        ;;
+    list|ls)
+        shift
+        handle_list "$@"
         ;;
     outdated)
         shift

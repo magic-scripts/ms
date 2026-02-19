@@ -174,6 +174,94 @@ handle_which() {
 }
 
 
+handle_list() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}List installed commands with version info${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms list${NC}"
+        echo ""
+        echo "${YELLOW}Shows:${NC}"
+        echo "  All installed commands, their installed version,"
+        echo "  latest available version, and update status."
+        echo "  Automatically updates registries before listing."
+        return 0
+    fi
+
+    # Update registries first
+    echo "${CYAN}Updating registries...${NC}"
+    if command -v update_registries >/dev/null 2>&1; then
+        update_registries >/dev/null 2>&1 || true
+    fi
+    echo ""
+
+    local ms_install_dir="$HOME/.local/bin/ms"
+    local count=0
+    local update_count=0
+
+    if [ ! -d "$ms_install_dir" ]; then
+        echo "${YELLOW}No Magic Scripts commands installed.${NC}"
+        return 0
+    fi
+
+    # Count installed commands
+    for cmd_file in "$ms_install_dir"/*; do
+        [ -f "$cmd_file" ] && [ -x "$cmd_file" ] && count=$((count + 1))
+    done
+
+    if [ "$count" -eq 0 ]; then
+        echo "${YELLOW}No Magic Scripts commands installed.${NC}"
+        return 0
+    fi
+
+    echo "${YELLOW}Installed Commands ($count)${NC}"
+
+    for cmd_file in "$ms_install_dir"/*; do
+        [ -f "$cmd_file" ] && [ -x "$cmd_file" ] || continue
+        local cmd_name
+        cmd_name=$(basename "$cmd_file")
+
+        local installed
+        installed=$(get_installed_version "$cmd_name")
+        local latest
+        latest=$(get_registry_version "$cmd_name")
+        local is_pinned
+        is_pinned=$(get_installation_metadata "$cmd_name" "pinned")
+        local comparison
+        comparison=$(compare_versions "$installed" "$latest")
+
+        if [ "$latest" = "unknown" ]; then
+            printf "  ${CYAN}%-20s${NC}  ${BLUE}%-10s${NC}   %-10s  ?\n" \
+                "$cmd_name" "$(format_version "$installed")" "unknown"
+        elif [ "$comparison" = "update_needed" ]; then
+            if [ "$is_pinned" = "true" ]; then
+                printf "  ${CYAN}%-20s${NC}  ${YELLOW}%-10s -> %-10s${NC}  (pinned)\n" \
+                    "$cmd_name" "$(format_version "$installed")" "$(format_version "$latest")"
+            else
+                printf "  ${CYAN}%-20s${NC}  ${RED}%-10s${NC} -> ${GREEN}%-10s${NC}  update available\n" \
+                    "$cmd_name" "$(format_version "$installed")" "$(format_version "$latest")"
+            fi
+            update_count=$((update_count + 1))
+        else
+            if [ "$is_pinned" = "true" ]; then
+                printf "  ${CYAN}%-20s${NC}  ${GREEN}%-10s${NC}   ${GREEN}%-10s${NC}  ok (pinned)\n" \
+                    "$cmd_name" "$(format_version "$installed")" "$(format_version "$latest")"
+            else
+                printf "  ${CYAN}%-20s${NC}  ${GREEN}%-10s${NC}   ${GREEN}%-10s${NC}  ok\n" \
+                    "$cmd_name" "$(format_version "$installed")" "$(format_version "$latest")"
+            fi
+        fi
+    done
+
+    echo ""
+    if [ "$update_count" -gt 0 ]; then
+        echo "${YELLOW}$update_count update(s) available.${NC} Run '${CYAN}ms update${NC}' to update all."
+    else
+        echo "${GREEN}All commands are up to date.${NC}"
+    fi
+}
+
+
 handle_outdated() {
     if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
         echo "${YELLOW}Check for outdated installed commands${NC}"
