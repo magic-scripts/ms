@@ -234,6 +234,7 @@ Registry system library.
 - All downloads verified before use
 - Mismatched checksums abort installation
 - Development versions (`dev`) skip verification
+- **Exception:** The `ms` core itself skips file-level checksum verification and relies on HTTPS transport security instead (same trust model as `ms update ms` self-update flow)
 
 ### Execution Security
 

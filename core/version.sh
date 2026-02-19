@@ -136,7 +136,7 @@ version_verify_checksum() {
     local expected_checksum=$(metadata_get "$cmd" "checksum")
     local script_path=$(metadata_get "$cmd" "script_path")
 
-    if [ "$expected_checksum" = "unknown" ] || [ "$script_path" = "unknown" ]; then
+    if [ "$expected_checksum" = "unknown" ] || [ -z "$expected_checksum" ] || [ "$script_path" = "unknown" ]; then
         return 2  # Cannot verify - no metadata
     fi
 

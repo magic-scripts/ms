@@ -299,7 +299,7 @@ MSPACK_EOF
     cat > "$name/registry/${name}.msver" << MSVER_EOF
 # $name Version Tree
 # Format: version|version_name|download_url|checksum|install_script|uninstall_script|update_script|man_url
-version|dev|$raw_base/scripts/${name}.sh|dev|$raw_base/installer/install.sh|$raw_base/installer/uninstall.sh||$raw_base/man/${name}.1
+version|dev|$raw_base/scripts/${name}.sh|dev|$raw_base/installer/install.sh|$raw_base/installer/uninstall.sh|$raw_base/installer/update.sh|$raw_base/man/${name}.1
 MSVER_EOF
 
     # installer/install.sh
@@ -319,6 +319,22 @@ INSTALL_EOF
 echo "$name uninstall script completed successfully"
 UNINSTALL_EOF
     chmod +x "$name/installer/uninstall.sh"
+
+    # installer/update.sh
+    cat > "$name/installer/update.sh" << UPDATE_EOF
+#!/bin/sh
+
+# $name Update Script
+# Called by ms after installing the new version
+# Args: cmd old_version new_version target_script wrapper_path registry_name
+
+CMD="\${1:-$name}"
+OLD_VERSION="\${2:-unknown}"
+NEW_VERSION="\${3:-unknown}"
+
+echo "\$CMD updated: \$OLD_VERSION -> \$NEW_VERSION"
+UPDATE_EOF
+    chmod +x "$name/installer/update.sh"
 
     # .gitignore
     cat > "$name/.gitignore" << GITIGNORE_EOF
@@ -376,6 +392,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 LICENSE_EOF
 
+    # man/<name>.1
+    local man_date
+    man_date=$(date '+%B %Y')
+    cat > "$name/man/${name}.1" << MAN_EOF
+.TH $upper_name 1 "$man_date" "$name 0.1.0" "User Commands"
+.SH NAME
+$name \- $description
+.SH SYNOPSIS
+.B $name
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+$description
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show help message and exit.
+.TP
+.B \-v, \-\-version
+Show version information and exit.
+.SH EXAMPLES
+.TP
+Run the command:
+.B $name
+.TP
+Show help:
+.B $name \-\-help
+.SH SEE ALSO
+.BR ms (1)
+.SH AUTHOR
+$author_name <$author_email>
+MAN_EOF
+
     echo ""
     echo "${GREEN}Created project '$name':${NC}"
     echo "  $name/"
@@ -384,7 +432,8 @@ LICENSE_EOF
     echo "  ├── registry/${name}.msver"
     echo "  ├── installer/install.sh"
     echo "  ├── installer/uninstall.sh"
-    echo "  ├── man/"
+    echo "  ├── installer/update.sh"
+    echo "  ├── man/${name}.1"
     echo "  ├── README.md"
     echo "  ├── LICENSE"
     echo "  └── .gitignore"

@@ -63,22 +63,30 @@ echo "${YELLOW}Updating Magic Scripts core system...${NC}"
 echo ""
 
 # Update core files
-printf "  Downloading config.sh... "
-if download_file "$RAW_URL/core/config.sh" "$MAGIC_DIR/core/config.sh"; then
-    printf "${GREEN}done${NC}\n"
-else
-    printf "${RED}failed${NC}\n"
-    exit 1
-fi
+mkdir -p "$MAGIC_DIR/core"
+for f in config.sh registry.sh metadata.sh version.sh pack.sh; do
+    printf "  Downloading $f... "
+    if download_file "$RAW_URL/core/$f" "$MAGIC_DIR/core/$f"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+done
 
-printf "  Downloading registry.sh... "
-if download_file "$RAW_URL/core/registry.sh" "$MAGIC_DIR/core/registry.sh"; then
-    printf "${GREEN}done${NC}\n"
-else
-    printf "${RED}failed${NC}\n"
-    exit 1
-fi
+# Update lib files
+mkdir -p "$MAGIC_DIR/lib"
+for f in install.sh uninstall.sh update.sh query.sh maintenance.sh; do
+    printf "  Downloading $f... "
+    if download_file "$RAW_URL/lib/$f" "$MAGIC_DIR/lib/$f"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+done
 
+# Update main script
 printf "  Downloading ms.sh... "
 if download_file "$RAW_URL/scripts/ms.sh" "$MAGIC_DIR/scripts/ms.sh"; then
     chmod +x "$MAGIC_DIR/scripts/ms.sh"
@@ -106,7 +114,9 @@ echo "========================================="
 echo ""
 
 echo "${CYAN}What was updated:${NC}"
-echo "  - Core system files (config.sh, registry.sh, ms.sh)"
+echo "  - Core libraries: config.sh, registry.sh, metadata.sh, version.sh, pack.sh"
+echo "  - Lib modules: install.sh, uninstall.sh, update.sh, query.sh, maintenance.sh"
+echo "  - Main script: ms.sh"
 echo "  - Registry data"
 echo ""
 

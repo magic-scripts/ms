@@ -374,8 +374,9 @@ handle_ms_force_reinstall() {
         return 1
     fi
     
-    local script_url install_script_url uninstall_script_url update_script_url man_url version_name
+    local script_url install_script_url uninstall_script_url update_script_url man_url version_name expected_checksum
     script_url=$(echo "$ms_info" | cut -d'|' -f3)
+    expected_checksum=$(echo "$ms_info" | cut -d'|' -f4)
     version_name=$(echo "$ms_info" | cut -d'|' -f2)
     install_script_url=$(echo "$ms_info" | cut -d'|' -f5)
     uninstall_script_url=$(echo "$ms_info" | cut -d'|' -f6)
@@ -401,12 +402,29 @@ handle_ms_force_reinstall() {
         install_result=1
     fi
     
+    if [ $install_result -eq 0 ]; then
+        # Verify ms.sh checksum using msver field 4
+        if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "dev" ]; then
+            local ms_script="$HOME/.local/share/magicscripts/scripts/ms.sh"
+            local actual_checksum
+            actual_checksum=$(version_calculate_checksum "$ms_script")
+            if [ "$actual_checksum" = "$expected_checksum" ]; then
+                echo "${GREEN}✓ ms.sh checksum verified${NC}"
+            else
+                echo "${RED}✗ ms.sh checksum mismatch (expected: $expected_checksum, got: $actual_checksum)${NC}"
+                install_result=1
+            fi
+        else
+            echo "${BLUE}ℹ ms.sh checksum verification skipped (dev version)${NC}"
+        fi
+    fi
+
     if [ $install_result -ne 0 ]; then
         echo ""
         echo "${RED}✗ Script update failed${NC}"
         return 1
     fi
-    
+
     echo ""
     echo "${GREEN}═══════════════════════════════════════════${NC}"
     echo "${GREEN}✅ Magic Scripts core script updated!${NC}"
