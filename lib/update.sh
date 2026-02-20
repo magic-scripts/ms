@@ -308,7 +308,7 @@ handle_update() {
         handle_update "ms"
         return
     elif [ "$base_cmd" = "ms" ] && [ -n "$requested_version" ]; then
-        # Version specified — warn and ask for confirmation
+        # Version specified — warn, confirm, and use update script
         echo "${YELLOW}⚠ Warning: Updating ms to a specific version can be risky.${NC}"
         echo "${YELLOW}   The running ms instance will be replaced.${NC}"
         echo ""
@@ -323,6 +323,58 @@ handle_update() {
                 return 0
                 ;;
         esac
+
+        # Get update script for requested version
+        echo "${YELLOW}Updating Magic Scripts core...${NC}"
+        echo "  Downloading update script..."
+
+        local update_script_url=""
+        if command -v get_command_info >/dev/null 2>&1; then
+            local full_cmd_info=$(get_command_info "ms" "$requested_version" 2>/dev/null)
+            local version_info
+            if [ "$requested_version" = "dev" ]; then
+                version_info=$(printf '%s\n' "$full_cmd_info" | grep "^version|dev|" | head -1)
+            else
+                version_info=$(printf '%s\n' "$full_cmd_info" | grep "^version|${requested_version}|" | head -1)
+            fi
+
+            if [ -z "$version_info" ]; then
+                echo "${RED}Error: Version '$requested_version' not found for ms${NC}"
+                exit 1
+            fi
+
+            update_script_url=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
+        fi
+
+        if [ -z "$update_script_url" ]; then
+            echo "${RED}Error: Could not find update script URL for version $requested_version${NC}"
+            exit 1
+        fi
+
+        # Download and execute update script
+        local temp_upgrade=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; exit 1; }
+        if command -v download_file >/dev/null 2>&1; then
+            if ! download_file "$update_script_url" "$temp_upgrade"; then
+                echo "${RED}Error: Failed to download update script${NC}"
+                rm -f "$temp_upgrade"
+                exit 1
+            fi
+        elif command -v curl >/dev/null 2>&1; then
+            if ! curl -fsSL "$update_script_url" -o "$temp_upgrade"; then
+                echo "${RED}Error: Failed to download update script${NC}"
+                rm -f "$temp_upgrade"
+                exit 1
+            fi
+        else
+            echo "${RED}Error: curl required for update${NC}"
+            rm -f "$temp_upgrade"
+            exit 1
+        fi
+
+        echo "  Running update..."
+        chmod +x "$temp_upgrade"
+        MS_TARGET_VERSION="$requested_version" exec "$temp_upgrade"
+        return
     fi
 
     # Check if command is installed

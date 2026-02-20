@@ -785,6 +785,21 @@ pack_release() {
             ms_error "Failed to create branch '$branch_name'" "Branch may already exist"
             return 1
         fi
+
+        # Update VERSION variable in ms.sh for release
+        local ms_script=""
+        if [ -f "scripts/ms.sh" ]; then
+            ms_script="scripts/ms.sh"
+        elif [ -f "../scripts/ms.sh" ]; then
+            ms_script="../scripts/ms.sh"
+        fi
+
+        if [ -n "$ms_script" ] && [ -f "$ms_script" ]; then
+            echo "  Updating VERSION in $ms_script to $version..."
+            sed -i.bak "s/^VERSION=\"dev\"/VERSION=\"$version\"/" "$ms_script"
+            rm -f "${ms_script}.bak"
+        fi
+
         git add -A 2>/dev/null
         if ! git commit -m "rel: v${version}" 2>/dev/null; then
             echo "  ${YELLOW}No changes to commit${NC}"

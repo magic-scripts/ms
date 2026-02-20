@@ -12,8 +12,30 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
 
+# Determine target branch from environment variables
+# MS_TARGET_VERSION: "dev", "1.0.0", etc. (preferred)
+# MS_TARGET_BRANCH: explicit branch override
+if [ -n "${MS_TARGET_BRANCH:-}" ]; then
+    # Explicit branch specified
+    BRANCH="$MS_TARGET_BRANCH"
+elif [ -n "${MS_TARGET_VERSION:-}" ]; then
+    # Version specified — determine branch
+    case "$MS_TARGET_VERSION" in
+        dev)
+            BRANCH="develop"
+            ;;
+        *)
+            # Semver version — use release branch
+            BRANCH="release/v${MS_TARGET_VERSION}"
+            ;;
+    esac
+else
+    # Default: main branch (latest stable)
+    BRANCH="main"
+fi
+
 # URLs
-RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/main"
+RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/${BRANCH}"
 
 check_command() {
     command -v "$1" >/dev/null 2>&1
