@@ -405,10 +405,11 @@ handle_clean() {
         echo "${YELLOW}Clean up cache files and orphaned data${NC}"
         echo ""
         echo "${YELLOW}Usage:${NC}"
-        echo "  ${CYAN}ms clean${NC} [--dry-run]"
+        echo "  ${CYAN}ms clean${NC} [options]"
         echo ""
         echo "${YELLOW}Options:${NC}"
-        echo "  ${GREEN}--dry-run${NC}    Show what would be cleaned without deleting"
+        echo "  ${GREEN}--dry-run${NC}     Show what would be cleaned without deleting"
+        echo "  ${GREEN}-y, --yes${NC}     Skip confirmation prompt"
         echo ""
         echo "${YELLOW}Cleans:${NC}"
         echo "  Registry cache files, orphaned metadata, temp files"
@@ -416,8 +417,78 @@ handle_clean() {
     fi
 
     local dry_run=false
-    if [ "$1" = "--dry-run" ]; then
-        dry_run=true
+    local auto_confirm=false
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run)
+                dry_run=true
+                ;;
+            -y|--yes)
+                auto_confirm=true
+                ;;
+            *)
+                echo "${RED}Unknown option: $1${NC}"
+                echo "Run ${CYAN}ms clean --help${NC} for usage"
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    # Count files before confirmation (unless dry-run or auto-confirm)
+    if [ "$dry_run" = false ] && [ "$auto_confirm" = false ]; then
+        local reg_dir="$HOME/.local/share/magicscripts/reg"
+        local meta_dir="$HOME/.local/share/magicscripts/installed"
+        local preview_reg=0
+        local preview_meta=0
+        local preview_tmp=0
+
+        # Count registry cache files
+        if [ -d "$reg_dir" ]; then
+            for cache_file in "$reg_dir"/*.msreg; do
+                [ -f "$cache_file" ] && preview_reg=$((preview_reg + 1))
+            done
+        fi
+
+        # Count orphaned metadata
+        if [ -d "$meta_dir" ]; then
+            for meta_file in "$meta_dir"/*.msmeta; do
+                [ -f "$meta_file" ] || continue
+                local cmd_name=$(basename "$meta_file" .msmeta)
+                [ ! -f "$HOME/.local/bin/ms/$cmd_name" ] && preview_meta=$((preview_meta + 1))
+            done
+        fi
+
+        # Count temp files
+        for tmp_file in /tmp/ms_*; do
+            [ -f "$tmp_file" ] && preview_tmp=$((preview_tmp + 1))
+        done
+
+        local preview_total=$((preview_reg + preview_meta + preview_tmp))
+
+        if [ "$preview_total" -eq 0 ]; then
+            echo "${GREEN}Nothing to clean.${NC}"
+            return 0
+        fi
+
+        echo "${YELLOW}The following will be removed:${NC}"
+        echo "  Registry cache files:  ${CYAN}$preview_reg${NC}"
+        echo "  Orphaned metadata:     ${CYAN}$preview_meta${NC}"
+        echo "  Temp files:            ${CYAN}$preview_tmp${NC}"
+        echo "  ${YELLOW}Total: $preview_total file(s)${NC}"
+        echo ""
+        printf "Proceed with cleaning? [y/N] "
+        read -r confirm
+        case "$confirm" in
+            y|Y)
+                echo ""
+                ;;
+            *)
+                echo "${YELLOW}Cleaning cancelled.${NC}"
+                return 0
+                ;;
+        esac
     fi
 
     echo "${YELLOW}Cleaning Magic Scripts cache...${NC}"

@@ -539,6 +539,7 @@ show_pub_pack_release_help() {
     echo "  ${GREEN}--checksum-from <file>${NC}  Script file path (auto-detects if not specified)"
     echo "  ${GREEN}--no-push${NC}               Skip pushing branches to origin (push is on by default)"
     echo "  ${GREEN}--no-git${NC}                Skip git operations (only update .msver)"
+    echo "  ${GREEN}-y, --yes${NC}               Skip confirmation prompt"
     echo ""
     echo "${YELLOW}Examples:${NC}"
     echo "  ${CYAN}ms pack release registry/ 1.0.0${NC}"
@@ -564,6 +565,7 @@ pack_release() {
     local checksum_from=""
     local do_push=true
     local no_git=false
+    local auto_confirm=false
 
     # Parse arguments
     while [ $# -gt 0 ]; do
@@ -581,6 +583,9 @@ pack_release() {
                 ;;
             --no-git)
                 no_git=true
+                ;;
+            -y|--yes)
+                auto_confirm=true
                 ;;
             *)
                 if [ -z "$registry_dir" ]; then
@@ -748,6 +753,31 @@ pack_release() {
 
     # Step 4-7: Git workflow (skip if --no-git)
     if [ "$no_git" = false ]; then
+        # Confirmation before destructive git operations
+        if [ "$auto_confirm" = false ]; then
+            echo "${YELLOW}⚠ Release v${version} will perform the following git operations:${NC}"
+            echo "  ${CYAN}1.${NC} Create branch: ${CYAN}${branch_name}${NC}"
+            echo "  ${CYAN}2.${NC} Merge ${CYAN}${branch_name}${NC} into ${CYAN}main${NC}"
+            echo "  ${CYAN}3.${NC} Sync ${CYAN}develop${NC} from ${CYAN}main${NC}"
+            if [ "$do_push" = true ]; then
+                echo "  ${CYAN}4.${NC} Push to origin: ${CYAN}${branch_name}${NC}, ${CYAN}main${NC}, ${CYAN}develop${NC}"
+            fi
+            echo ""
+            echo "${YELLOW}This operation cannot be easily undone.${NC}"
+            echo ""
+            printf "Proceed with release? [y/N] "
+            read -r confirm
+            case "$confirm" in
+                y|Y)
+                    echo ""
+                    ;;
+                *)
+                    echo "${YELLOW}Release cancelled.${NC}"
+                    return 0
+                    ;;
+            esac
+        fi
+
         # Step 4: Create release branch
         echo ""
         echo "${CYAN}[4/${total_steps}] Creating release branch...${NC}"
