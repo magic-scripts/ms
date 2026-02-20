@@ -852,6 +852,7 @@ show_pub_pack_help() {
     echo "  ${GREEN}version update${NC}                Update checksum for existing version"
     echo "  ${GREEN}verify <directory>${NC}            Validate registry files in directory"
     echo "  ${GREEN}release <dir> <ver>${NC}           Automate version release workflow"
+    echo "  ${GREEN}protect [path]${NC}                Apply GitHub branch protection (main, release/*)"
     echo ""
     echo "${YELLOW}Examples:${NC}"
     echo "  ${CYAN}ms pub pack init mycommand${NC}"
@@ -1891,6 +1892,120 @@ handle_pub() {
     esac
 }
 
+# Apply a single GitHub Ruleset for branch protection
+# Args: repo (owner/repo) name (display name) pattern (refs/heads/...)
+_pack_apply_ruleset() {
+    local repo="$1"
+    local name="$2"
+    local pattern="$3"
+
+    local json
+    json=$(printf '{"name":"%s","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["%s"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":false,"require_code_owner_review":false,"require_last_push_approval":false,"required_review_thread_resolution":false}}],"bypass_actors":[]}' \
+        "$name" "$pattern")
+
+    printf '%s' "$json" | gh api "repos/$repo/rulesets" --method POST --input - >/dev/null 2>/dev/null
+}
+
+# Apply GitHub branch protection rules via Rulesets API
+# Usage: ms pub pack protect [path]
+pack_protect() {
+    local path="${1:-.}"
+
+    # Check for --help
+    case "$path" in
+        -h|--help|help)
+            echo "${YELLOW}Apply GitHub branch protection to a command project${NC}"
+            echo ""
+            echo "${YELLOW}Usage:${NC}"
+            echo "  ${CYAN}ms pub pack protect${NC} [path]"
+            echo ""
+            echo "${YELLOW}Arguments:${NC}"
+            echo "  ${GREEN}path${NC}    Path to git repository (default: current directory)"
+            echo ""
+            echo "${YELLOW}What it does:${NC}"
+            echo "  Applies GitHub Rulesets to block direct push, force-push, and deletion on:"
+            echo "    - main branch"
+            echo "    - release/** branches"
+            echo "  Changes must go through Pull Requests."
+            echo ""
+            echo "${YELLOW}Requirements:${NC}"
+            echo "  - git remote 'origin' must point to a GitHub repository"
+            echo "  - gh CLI must be installed and authenticated (gh auth login)"
+            echo ""
+            echo "${YELLOW}Examples:${NC}"
+            echo "  ${CYAN}ms pub pack protect${NC}"
+            echo "  ${CYAN}ms pub pack protect ./mshello${NC}"
+            return 0
+            ;;
+    esac
+
+    # Validate git remote
+    local remote_url
+    remote_url=$(git -C "$path" remote get-url origin 2>/dev/null)
+    if [ -z "$remote_url" ]; then
+        echo "${RED}Error: Not a git repository or no remote 'origin' configured${NC}" >&2
+        echo "  Run inside a git repo or pass the path: ${CYAN}ms pub pack protect <path>${NC}" >&2
+        return 1
+    fi
+
+    # Validate GitHub URL
+    case "$remote_url" in
+        git@github.com:*|https://github.com/*) ;;
+        *)
+            echo "${RED}Error: Remote is not a GitHub repository${NC}" >&2
+            echo "  Only GitHub is supported. Remote: $remote_url" >&2
+            return 1
+            ;;
+    esac
+
+    # Extract owner/repo
+    local gh_repo
+    gh_repo=$(printf '%s' "$remote_url" | sed 's|git@github\.com:||; s|https://github\.com/||; s|\.git$||')
+
+    # Check gh CLI
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "${RED}Error: gh CLI is required${NC}" >&2
+        echo "  Install from: https://cli.github.com" >&2
+        return 1
+    fi
+    if ! gh auth status >/dev/null 2>&1; then
+        echo "${RED}Error: gh CLI not authenticated${NC}" >&2
+        echo "  Run: ${CYAN}gh auth login${NC}" >&2
+        return 1
+    fi
+
+    echo "Applying GitHub branch protection to ${CYAN}$gh_repo${NC}..."
+    echo ""
+
+    local failed=0
+
+    printf "  %-40s" "Protect main (refs/heads/main)"
+    if _pack_apply_ruleset "$gh_repo" "Protect main" "refs/heads/main"; then
+        echo "${GREEN}done${NC}"
+    else
+        echo "${RED}failed${NC}"
+        failed=$((failed + 1))
+    fi
+
+    printf "  %-40s" "Protect releases (refs/heads/release/**)"
+    if _pack_apply_ruleset "$gh_repo" "Protect releases" "refs/heads/release/**"; then
+        echo "${GREEN}done${NC}"
+    else
+        echo "${RED}failed${NC}"
+        failed=$((failed + 1))
+    fi
+
+    echo ""
+    if [ "$failed" -eq 0 ]; then
+        echo "${GREEN}Branch protection applied successfully.${NC}"
+        echo "  View rules: ${CYAN}https://github.com/$gh_repo/settings/rules${NC}"
+    else
+        echo "${RED}$failed ruleset(s) failed — check repo permissions or existing rules.${NC}"
+        echo "  View rules: ${CYAN}https://github.com/$gh_repo/settings/rules${NC}"
+        return 1
+    fi
+}
+
 handle_pub_pack() {
     case "$1" in
         -h|--help|help|"")
@@ -1920,6 +2035,10 @@ handle_pub_pack() {
         release)
             shift
             pack_release "$@"
+            ;;
+        protect)
+            shift
+            pack_protect "$@"
             ;;
         *)
             ms_error "Unknown pack command: '$1'" "Run 'ms pack help' for available commands"

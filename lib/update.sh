@@ -302,13 +302,27 @@ handle_update() {
     fi
     local cmd="$base_cmd"
 
-    # Redirect ms to its special update path (no version spec support)
-    if [ "$base_cmd" = "ms" ]; then
-        if [ -n "$requested_version" ]; then
-            echo "${YELLOW}Note: ms update does not support version specification. Running standard ms update.${NC}"
-        fi
+    # Warning for ms version specification (risky but allowed)
+    if [ "$base_cmd" = "ms" ] && [ -z "$requested_version" ]; then
+        # No version specified — use safe update path
         handle_update "ms"
         return
+    elif [ "$base_cmd" = "ms" ] && [ -n "$requested_version" ]; then
+        # Version specified — warn and ask for confirmation
+        echo "${YELLOW}⚠ Warning: Updating ms to a specific version can be risky.${NC}"
+        echo "${YELLOW}   The running ms instance will be replaced.${NC}"
+        echo ""
+        printf "Proceed with updating ms to ${CYAN}%s${NC}? [y/N] " "$requested_version"
+        read -r confirm
+        case "$confirm" in
+            y|Y)
+                echo ""
+                ;;
+            *)
+                echo "${YELLOW}Update cancelled.${NC}"
+                return 0
+                ;;
+        esac
     fi
 
     # Check if command is installed
