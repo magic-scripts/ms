@@ -487,6 +487,9 @@ handle_versions() {
         echo "${GREEN}✓ Up to date${NC}"
     elif [ "$comparison" = "unknown" ]; then
         echo "${YELLOW}⚠ Version information unavailable${NC}"
+    elif [ "$installed_version" = "unknown" ]; then
+        echo "${YELLOW}⚠ Not installed${NC}"
+        echo "  Run: ${CYAN}ms install $cmd${NC}"
     else
         echo "${YELLOW}⚠ Update available${NC}"
         echo "  Run: ${CYAN}ms update $cmd${NC}"

@@ -20,8 +20,8 @@ cleanup_ms() {
 # Set trap for cleanup on exit/interrupt
 trap cleanup_ms EXIT INT TERM
 
-# Try to load core libraries
-for lib in config.sh registry.sh metadata.sh version.sh; do
+# Try to load core libraries (utils.sh must be loaded first)
+for lib in utils.sh config.sh registry.sh metadata.sh version.sh; do
     if [ -f "$MAGIC_SCRIPT_DIR/core/$lib" ]; then
         . "$MAGIC_SCRIPT_DIR/core/$lib"
     elif [ -f "$SCRIPT_DIR/../core/$lib" ]; then
