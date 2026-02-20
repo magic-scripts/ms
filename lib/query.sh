@@ -485,6 +485,8 @@ handle_versions() {
     local comparison=$(compare_versions "$installed_version" "$registry_version")
     if [ "$comparison" = "same" ]; then
         echo "${GREEN}✓ Up to date${NC}"
+    elif [ "$comparison" = "unknown" ]; then
+        echo "${YELLOW}⚠ Version information unavailable${NC}"
     else
         echo "${YELLOW}⚠ Update available${NC}"
         echo "  Run: ${CYAN}ms update $cmd${NC}"

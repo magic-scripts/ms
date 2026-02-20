@@ -87,6 +87,12 @@ version_compare() {
     local installed="$1"
     local registry="$2"
 
+    # If both versions are unknown, cannot compare
+    if [ "$installed" = "unknown" ] && [ "$registry" = "unknown" ]; then
+        echo "unknown"
+        return
+    fi
+
     # If either version is unknown, consider update needed
     if [ "$installed" = "unknown" ] || [ "$registry" = "unknown" ]; then
         echo "update_needed"
