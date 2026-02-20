@@ -37,8 +37,15 @@ handle_update() {
     # Special case: ms update ms
     if [ "$1" = "ms" ]; then
         echo "${YELLOW}Updating Magic Scripts core...${NC}"
-        
-        # Get update script URL from ms.msreg -> ms.msver  
+
+        # Development mode: use local update script
+        if [ -n "${MAGIC_SCRIPT_DIR:-}" ] && [ -f "$MAGIC_SCRIPT_DIR/installer/update.sh" ]; then
+            echo "  ${CYAN}Development mode:${NC} Using local update script"
+            exec sh "$MAGIC_SCRIPT_DIR/installer/update.sh"
+            return
+        fi
+
+        # Get update script URL from ms.msreg -> ms.msver
         local update_script_url
         if command -v ms_internal_get_script_info >/dev/null 2>&1; then
             local ms_info=$(ms_internal_get_script_info "ms" 2>/dev/null)
@@ -54,14 +61,14 @@ handle_update() {
                 fi
             fi
         fi
-        
+
         # Fallback to hardcoded URL if dynamic lookup fails
         if [ -z "$update_script_url" ]; then
             local raw_url="https://raw.githubusercontent.com/magic-scripts/ms/main"
             update_script_url="$raw_url/installer/update.sh"
         fi
         local temp_update=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
-        
+
         printf "  Downloading update script... "
         if command -v download_file >/dev/null 2>&1; then
             if download_file "$update_script_url" "$temp_update"; then
@@ -92,7 +99,7 @@ handle_update() {
             rm -f "$temp_update"
             return 1
         fi
-        
+
         chmod +x "$temp_update"
         echo "  Running update..."
         exec sh "$temp_update"
