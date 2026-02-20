@@ -51,13 +51,13 @@ download_file() {
     
     # Basic URL validation for security
     if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
-        echo "Error: Invalid URL format for download: $url" >&2
+        echo "${RED}Error: Invalid URL format for download: $url${NC}" >&2
         return 1
     fi
     
     # Security check: prevent access to localhost/internal IPs
     if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)" ; then
-        echo "Error: Downloads from local/internal addresses are not allowed for security" >&2
+        echo "${RED}Error: Downloads from local/internal addresses are not allowed for security${NC}" >&2
         return 1
     fi
     
@@ -66,7 +66,7 @@ download_file() {
     elif check_command wget; then
         wget -q "$url" -O "$output" 2>/dev/null
     else
-        echo "Error: curl or wget is required for downloading" >&2
+        echo "${RED}Error: curl or wget is required for downloading${NC}" >&2
         return 1
     fi
 }
@@ -120,27 +120,27 @@ list_registries() {
 add_registry() {
     local name="$1"
     local url="$2"
-    
+
     if [ -z "$name" ] || [ -z "$url" ]; then
-        echo "Error: Both registry name and URL are required" >&2
+        echo "${RED}Error: Both registry name and URL are required${NC}" >&2
         return 1
     fi
     
     # Validate URL format and security
     if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
-        echo "Error: Invalid URL format. Must be a valid HTTP/HTTPS URL" >&2
+        echo "${RED}Error: Invalid URL format. Must be a valid HTTP/HTTPS URL${NC}" >&2
         return 1
     fi
     
     # Security check: ensure URL points to a reasonable domain
     if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)"; then
-        echo "Error: URLs pointing to localhost or private networks are not allowed for security reasons" >&2
+        echo "${RED}Error: URLs pointing to localhost or private networks are not allowed for security reasons${NC}" >&2
         return 1
     fi
     
     # Validate registry name
     if ! echo "$name" | grep -q "^[a-zA-Z0-9_-]\+$"; then
-        echo "Error: Registry name can only contain letters, numbers, underscores, and dashes" >&2
+        echo "${RED}Error: Registry name can only contain letters, numbers, underscores, and dashes${NC}" >&2
         return 1
     fi
     
@@ -148,7 +148,7 @@ add_registry() {
     
     # Check if registry already exists
     if [ -f "$REGLIST_FILE" ] && grep -q "^$name:" "$REGLIST_FILE"; then
-        echo "Error: Registry '$name' already exists" >&2
+        echo "${RED}Error: Registry '$name' already exists${NC}" >&2
         return 1
     fi
     
@@ -168,9 +168,9 @@ add_registry() {
 # Remove a registry
 remove_registry() {
     local name="$1"
-    
+
     if [ -z "$name" ]; then
-        echo "Error: Registry name is required" >&2
+        echo "${RED}Error: Registry name is required${NC}" >&2
         return 1
     fi
     
@@ -183,13 +183,13 @@ remove_registry() {
     fi
     
     if [ ! -f "$REGLIST_FILE" ]; then
-        echo "Error: No registry list found" >&2
+        echo "${RED}Error: No registry list found${NC}" >&2
         return 1
     fi
-    
+
     # Check if registry exists
     if ! grep -q "^$name:" "$REGLIST_FILE"; then
-        echo "Error: Registry '$name' not found" >&2
+        echo "${RED}Error: Registry '$name' not found${NC}" >&2
         return 1
     fi
     
@@ -210,16 +210,16 @@ remove_registry() {
 update_registry() {
     local name="$1"
     local url=""
-    
+
     if [ ! -f "$REGLIST_FILE" ]; then
-        echo "Error: No registry list found" >&2
+        echo "${RED}Error: No registry list found${NC}" >&2
         return 1
     fi
-    
+
     # Get URL for registry
     url=$(grep "^$name:" "$REGLIST_FILE" | cut -d':' -f2-)
     if [ -z "$url" ]; then
-        echo "Error: Registry '$name' not found in reglist" >&2
+        echo "${RED}Error: Registry '$name' not found in reglist${NC}" >&2
         return 1
     fi
     
@@ -283,7 +283,7 @@ update_registries() {
 
 # Get all commands from all registries
 get_all_commands() {
-    local temp_commands=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_commands=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
@@ -378,7 +378,7 @@ get_registry_commands() {
 # Search commands by query
 search_commands() {
     local query="$1"
-    local temp_results=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_results=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     
     echo "=== Search Results${query:+ for '$query'} ==="
     echo ""
@@ -464,10 +464,10 @@ download_and_parse_msver() {
     local target_cmd="$2"
     local target_version="$3"
 
-    local temp_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_file=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
 
     if ! download_file "$package_url" "$temp_file"; then
-        echo "Error: Cannot download package file from $package_url" >&2
+        echo "${RED}Error: Cannot download package file from $package_url${NC}" >&2
         return 1
     fi
 
@@ -516,7 +516,7 @@ download_and_parse_msver() {
             echo "" >> "$temp_msver"
             _parse_msver_file "$temp_msver" "$target_version"
         else
-            echo "Error: Cannot download .msver file from $msver_url" >&2
+            echo "${RED}Error: Cannot download .msver file from $msver_url${NC}" >&2
             rm -f "$temp_msver"
             rm -f "$temp_file"
             return 1

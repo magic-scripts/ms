@@ -49,7 +49,7 @@ execute_hook() {
         return 0
     fi
 
-    local temp_hook=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_hook=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     local hook_success=false
 
     if command -v download_file >/dev/null 2>&1; then
@@ -169,21 +169,21 @@ install_script() {
                 # Remote URI - download with security validation
                 if command -v download_file >/dev/null 2>&1; then
                     if ! download_file "$script_uri" "$target_script"; then
-                        echo "Error: Failed to download script from $script_uri" >&2
+                        echo "${RED}Error: Failed to download script from $script_uri${NC}" >&2
                         return 1
                     fi
                 elif command -v curl >/dev/null 2>&1; then
                     if ! curl -fsSL "$script_uri" -o "$target_script" 2>/dev/null; then
-                        echo "Error: Failed to download script from $script_uri" >&2
+                        echo "${RED}Error: Failed to download script from $script_uri${NC}" >&2
                         return 1
                     fi
                 elif command -v wget >/dev/null 2>&1; then
                     if ! wget -q "$script_uri" -O "$target_script" 2>/dev/null; then
-                        echo "Error: Failed to download script from $script_uri" >&2
+                        echo "${RED}Error: Failed to download script from $script_uri${NC}" >&2
                         return 1
                     fi
                 else
-                    echo "Error: curl or wget required for downloading" >&2
+                    echo "${RED}Error: curl or wget required for downloading${NC}" >&2
                     return 1
                 fi
                 chmod 755 "$target_script"
@@ -194,7 +194,7 @@ install_script() {
                     cp "$script_uri" "$target_script"
                     chmod 755 "$target_script"
                 else
-                    echo "Error: Local script not found: $script_uri" >&2
+                    echo "${RED}Error: Local script not found: $script_uri${NC}" >&2
                     return 1
                 fi
                 ;;
@@ -203,7 +203,7 @@ install_script() {
     
     # Verify script exists
     if [ ! -f "$target_script" ]; then
-        echo "Error: Script installation failed" >&2
+        echo "${RED}Error: Script installation failed${NC}" >&2
         return 1
     fi
     
@@ -305,7 +305,7 @@ EOF
         echo "  ${CYAN}Running install script for $cmd...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
         if execute_hook "$install_hook_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
-            echo "  ${GREEN}Install script completed successfully${NC}"
+            echo "  ${GREEN}✓ Install hook completed${NC}"
         else
             echo "${YELLOW}Warning: Install script failed for $cmd, proceeding with installation${NC}" >&2
         fi
@@ -343,7 +343,7 @@ EOF
         echo "  ${CYAN}Running update script for $cmd ($(format_version "$old_version") → $(format_version "$target_version"))...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
         if execute_hook "$update_hook_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
-            echo "  ${GREEN}Update script completed successfully${NC}"
+            echo "  ${GREEN}✓ Update hook completed${NC}"
         else
             echo "${YELLOW}Warning: Update script failed for $cmd${NC}" >&2
             echo "  ${YELLOW}Installation completed but update tasks may not have been performed${NC}" >&2
@@ -414,7 +414,8 @@ install_registry_all() {
                 installed_count=$((installed_count + 1))
                 ;;
             2)
-                echo "${YELLOW}already installed${NC}"
+                local installed_ver=$(version_get_installed "$cmd")
+                echo "${YELLOW}already installed${NC} ($(format_version "$installed_ver"))"
                 ;;
             *)
                 echo "${RED}failed${NC}"
@@ -452,7 +453,8 @@ install_commands_with_detection() {
 
         if [ "$base_cmd" = "ms" ]; then
             printf "  Installing ${CYAN}%s${NC}... " "$cmd"
-            echo "${YELLOW}already installed${NC}"
+            local ms_ver=$(version_get_installed "ms")
+            echo "${YELLOW}already installed${NC} ($(format_version "$ms_ver"))"
             echo "  Use ${CYAN}ms update ms${NC} to update"
             continue
         fi

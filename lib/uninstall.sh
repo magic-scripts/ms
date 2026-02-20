@@ -246,7 +246,7 @@ handle_uninstall() {
                         exit 0
                     fi
                 else
-                    echo "${YELLOW}Warning: Uninstall script failed for $cmd, proceeding with removal${NC}" >&2
+                    echo "${YELLOW}Warning: Uninstall script failed for $cmd $(format_version "$version"), proceeding with removal${NC}" >&2
                     if [ "$cmd" = "ms" ]; then
                         echo "  ${YELLOW}Attempting direct removal as fallback...${NC}"
                         if [ -f "$INSTALL_DIR/ms" ]; then

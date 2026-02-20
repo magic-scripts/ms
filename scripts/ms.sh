@@ -112,7 +112,7 @@ show_help() {
     echo "  ${GREEN}reg remove <name>${NC}       Remove a registry"
     echo ""
     echo "${YELLOW}Package Management:${NC}"
-    echo "  ${GREEN}list${NC}                    List installed commands with version info"
+    echo "  ${GREEN}list, ls${NC}                List installed commands with version info"
     echo "  ${GREEN}install <commands...>${NC}   Install specific commands (use cmd:version for versions)"
     echo "  ${GREEN}install -r <registry>${NC}   Install all commands from a registry"
     echo "  ${GREEN}update${NC}                  Update all installed commands and Magic Scripts"
@@ -291,10 +291,10 @@ suggest_similar_command() {
         exec|execute|try)
             echo "run"
             ;;
-        ver|--version|-v)
+        ver)
             echo "version"
             ;;
-        h|--help|-h)
+        h)
             echo "help"
             ;;
         *)
@@ -410,6 +410,27 @@ show_status() {
 }
 
 handle_config() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Manage Magic Scripts configuration${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms config <subcommand>${NC} [options]"
+        echo ""
+        echo "${YELLOW}Subcommands:${NC}"
+        echo "  ${GREEN}list${NC} [-r]       List configuration values (-r for registry defaults)"
+        echo "  ${GREEN}set${NC} [key|cmd]   Set configuration value interactively"
+        echo "  ${GREEN}get${NC} <key>       Get configuration value"
+        echo "  ${GREEN}unset${NC} <key>     Remove configuration value"
+        echo ""
+        echo "${YELLOW}Examples:${NC}"
+        echo "  ${CYAN}ms config list${NC}              # List all config values"
+        echo "  ${CYAN}ms config set${NC}               # Interactive setup for all keys"
+        echo "  ${CYAN}ms config set gigen${NC}         # Interactive setup for gigen command"
+        echo "  ${CYAN}ms config get DB_HOST${NC}       # Get specific value"
+        echo "  ${CYAN}ms config unset DB_HOST${NC}     # Remove value"
+        exit 0
+    fi
+
     case "$1" in
         list)
             shift
@@ -503,6 +524,26 @@ handle_config() {
 }
 
 handle_reg() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Manage Magic Scripts registries${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms reg <subcommand>${NC} [options]"
+        echo ""
+        echo "${YELLOW}Subcommands:${NC}"
+        echo "  ${GREEN}list${NC}                List all configured registries"
+        echo "  ${GREEN}add${NC} <name> <url>    Add a new registry"
+        echo "  ${GREEN}remove${NC} <name>       Remove a registry"
+        echo ""
+        echo "${YELLOW}Examples:${NC}"
+        echo "  ${CYAN}ms reg list${NC}                                    # List registries"
+        echo "  ${CYAN}ms reg add custom https://example.com/ms.msreg${NC} # Add registry"
+        echo "  ${CYAN}ms reg remove custom${NC}                           # Remove registry"
+        echo ""
+        echo "The default registry is: ${CYAN}default${NC}"
+        exit 0
+    fi
+
     case "$1" in
         list)
             if command -v list_registries >/dev/null 2>&1; then
@@ -554,8 +595,20 @@ handle_reg() {
 }
 
 handle_search() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Search for commands in the registry${NC}"
+        echo ""
+        echo "Usage: ms search [query]"
+        echo ""
+        echo "Examples:"
+        echo "  ms search              # Show all available commands"
+        echo "  ms search docker       # Search for commands related to docker"
+        echo "  ms search db           # Search for database-related commands"
+        exit 0
+    fi
+
     local query="$1"
-    
+
     if command -v search_commands >/dev/null 2>&1; then
         search_commands "$query"
     else
@@ -811,7 +864,7 @@ case "$1" in
             if install_script "$_reinstall_cmd" "$_ri_script_url" "$_ri_registry_name" "$_ri_found_ver" "force" "$_ri_install_hook" "$_ri_uninstall_hook" "$_ri_update_hook" "$_ri_man_url_val"; then
                 echo "${GREEN}done${NC}"
             else
-                echo "${RED}failed${NC}"
+                echo "${RED}failed${NC} (attempted: $(format_version "$_ri_found_ver"))"
             fi
         done
         ;;

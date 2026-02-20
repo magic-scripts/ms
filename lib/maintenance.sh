@@ -89,7 +89,8 @@ handle_unpin() {
 
     local is_pinned=$(get_installation_metadata "$cmd" "pinned")
     if [ "$is_pinned" != "true" ]; then
-        echo "${YELLOW}'$cmd' is not pinned${NC}"
+        local current_ver=$(get_installed_version "$cmd")
+        echo "${YELLOW}'$cmd' is not pinned${NC} (current: $(format_version "$current_ver"))"
         return 0
     fi
 
@@ -98,16 +99,31 @@ handle_unpin() {
     grep -v "^pinned=" "$meta_file" > "$tmp_file"
     mv "$tmp_file" "$meta_file"
 
-    echo "${GREEN}Unpinned '$cmd'${NC}"
+    local unpinned_ver=$(get_installed_version "$cmd")
+    echo "${GREEN}Unpinned '$cmd'${NC} (current: $(format_version "$unpinned_ver"))"
     echo "  ${CYAN}Hint:${NC} This command will now be updated with 'ms update'"
 }
 
 
 handle_doctor() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Diagnose Magic Scripts installation and fix common issues${NC}"
+        echo ""
+        echo "Usage: ms doctor [--fix]"
+        echo ""
+        echo "Options:"
+        echo "  ${GREEN}-f, --fix${NC}     Attempt to fix issues automatically"
+        echo ""
+        echo "Examples:"
+        echo "  ms doctor              # Run diagnostic checks"
+        echo "  ms doctor --fix        # Run checks and fix issues"
+        exit 0
+    fi
+
     local fix_mode=false
-    
+
     # Parse options
-    if [ "$1" = "--fix" ]; then
+    if [ "$1" = "-f" ] || [ "$1" = "--fix" ]; then
         fix_mode=true
         shift
     fi
@@ -219,7 +235,7 @@ handle_doctor() {
                                         echo "    ✅ $cmd: Reinstalled successfully"
                                         fixed_issues=$((fixed_issues + 1))
                                     else
-                                        echo "    ❌ $cmd: Reinstallation failed"
+                                        echo "    ❌ $cmd ${BLUE}[$(format_version "$installed_version")]${NC}: Reinstallation failed"
                                     fi
                                 fi
                             fi
@@ -408,7 +424,7 @@ handle_clean() {
         echo "  ${CYAN}ms clean${NC} [options]"
         echo ""
         echo "${YELLOW}Options:${NC}"
-        echo "  ${GREEN}--dry-run${NC}     Show what would be cleaned without deleting"
+        echo "  ${GREEN}-d, --dry-run${NC} Show what would be cleaned without deleting"
         echo "  ${GREEN}-y, --yes${NC}     Skip confirmation prompt"
         echo ""
         echo "${YELLOW}Cleans:${NC}"
@@ -421,7 +437,7 @@ handle_clean() {
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            --dry-run)
+            -d|--dry-run)
                 dry_run=true
                 ;;
             -y|--yes)
@@ -690,7 +706,7 @@ handle_import() {
             echo "${GREEN}done${NC}"
             installed_count=$((installed_count + 1))
         else
-            echo "${RED}failed${NC}"
+            echo "${RED}failed${NC} (attempted: $(format_version "$cmd_version"))"
             failed_count=$((failed_count + 1))
         fi
     done < "$import_file"
@@ -728,7 +744,8 @@ handle_unpin() {
 
     local is_pinned=$(get_installation_metadata "$cmd" "pinned")
     if [ "$is_pinned" != "true" ]; then
-        echo "${YELLOW}'$cmd' is not pinned${NC}"
+        local current_ver=$(get_installed_version "$cmd")
+        echo "${YELLOW}'$cmd' is not pinned${NC} (current: $(format_version "$current_ver"))"
         return 0
     fi
 
@@ -737,7 +754,8 @@ handle_unpin() {
     grep -v "^pinned=" "$meta_file" > "$tmp_file"
     mv "$tmp_file" "$meta_file"
 
-    echo "${GREEN}Unpinned '$cmd'${NC}"
+    local unpinned_ver=$(get_installed_version "$cmd")
+    echo "${GREEN}Unpinned '$cmd'${NC} (current: $(format_version "$unpinned_ver"))"
     echo "  ${CYAN}Hint:${NC} This command will now be updated with 'ms update'"
 }
 

@@ -16,7 +16,7 @@ ms_internal_ensure_config_dirs() {
 
 # Get configuration registry files (merged from all registries)
 ms_internal_get_config_registry_file() {
-    local merged_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local merged_file=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     
     # Config info is in .mspack files pointed by .msreg files
     if [ -f "$REGLIST_FILE" ]; then
@@ -154,7 +154,7 @@ get_config_value() {
     local default_value="$2"
     
     if [ -z "$key" ]; then
-        echo "Error: Configuration key is required" >&2
+        echo "${RED}Error: Configuration key is required${NC}" >&2
         return 1
     fi
     
@@ -167,7 +167,7 @@ get_config_value() {
         # If MS_SCRIPT_ID is empty or unset, deny access
         if [ -z "$calling_script" ] || [ "$calling_script" = "" ]; then
             rm -f "$config_registry_file" 2>/dev/null
-            echo "Error: Configuration access denied - script identity required" >&2
+            echo "${RED}Error: Configuration access denied - script identity required${NC}" >&2
             echo "This is an internal system function. Use 'ms config' commands instead." >&2
             return 1
         fi
@@ -177,14 +177,14 @@ get_config_value() {
             # First check if key is registered at all
             if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
-                echo "Error: Configuration key '$key' is not registered" >&2
+                echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
                 return 1
             fi
             
             # Then check if script has access
             if ! ms_internal_validate_config_key "$key" "$calling_script"; then
-                echo "Error: Script '$calling_script' does not have access to configuration key '$key'" >&2
+                echo "${RED}Error: Script '$calling_script' does not have access to configuration key '$key'${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
                 return 1
             fi
@@ -192,7 +192,7 @@ get_config_value() {
             # Even ms needs the key to be registered
             if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
-                echo "Error: Configuration key '$key' is not registered" >&2
+                echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
                 return 1
             fi
@@ -211,7 +211,7 @@ ms_internal_set_config_value() {
     local value="$2"
     
     if [ -z "$key" ] || [ -z "$value" ]; then
-        echo "Error: Both key and value are required" >&2
+        echo "${RED}Error: Both key and value are required${NC}" >&2
         return 1
     fi
     
@@ -219,7 +219,7 @@ ms_internal_set_config_value() {
     
     # Create config file if it doesn't exist
     touch "$CONFIG_FILE" 2>/dev/null || {
-        echo "Error: Cannot create config file: $CONFIG_FILE" >&2
+        echo "${RED}Error: Cannot create config file: $CONFIG_FILE${NC}" >&2
         return 1
     }
     
@@ -242,7 +242,7 @@ set_config_value() {
     local value="$2"
     
     if [ -z "$key" ] || [ -z "$value" ]; then
-        echo "Error: Both key and value are required" >&2
+        echo "${RED}Error: Both key and value are required${NC}" >&2
         return 1
     fi
     
@@ -255,7 +255,7 @@ set_config_value() {
         # If MS_SCRIPT_ID is empty or unset, deny access
         if [ -z "$calling_script" ] || [ "$calling_script" = "" ]; then
             rm -f "$config_registry_file" 2>/dev/null
-            echo "Error: Configuration access denied - script identity required" >&2
+            echo "${RED}Error: Configuration access denied - script identity required${NC}" >&2
             echo "This is an internal system function. Use 'ms config' commands instead." >&2
             return 1
         fi
@@ -265,14 +265,14 @@ set_config_value() {
             # First check if key is registered at all
             if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
-                echo "Error: Configuration key '$key' is not registered" >&2
+                echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
                 return 1
             fi
             
             # Then check if script has access
             if ! ms_internal_validate_config_key "$key" "$calling_script"; then
-                echo "Error: Script '$calling_script' does not have access to configuration key '$key'" >&2
+                echo "${RED}Error: Script '$calling_script' does not have access to configuration key '$key'${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
                 return 1
             fi
@@ -280,7 +280,7 @@ set_config_value() {
             # Even ms needs the key to be registered
             if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
-                echo "Error: Configuration key '$key' is not registered" >&2
+                echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
                 return 1
             fi
@@ -298,7 +298,7 @@ ms_internal_remove_config_value() {
     local key="$1"
     
     if [ -z "$key" ]; then
-        echo "Error: Key is required" >&2
+        echo "${RED}Error: Key is required${NC}" >&2
         return 1
     fi
     
@@ -319,7 +319,7 @@ remove_config_value() {
     local key="$1"
     
     if [ -z "$key" ]; then
-        echo "Error: Key is required" >&2
+        echo "${RED}Error: Key is required${NC}" >&2
         return 1
     fi
     
@@ -328,7 +328,7 @@ remove_config_value() {
     if [ -f "$config_registry_file" ] && [ -s "$config_registry_file" ]; then
         if ! ms_internal_validate_config_key "$key"; then
             rm -f "$config_registry_file" 2>/dev/null
-            echo "Error: Configuration key '$key' is not registered or accessible" >&2
+            echo "${RED}Error: Configuration key '$key' is not registered or accessible${NC}" >&2
             echo "Use 'ms config list -r' to see available configuration keys" >&2
             return 1
         fi
@@ -457,7 +457,7 @@ ms_internal_interactive_setup_category() {
     echo ""
     
     # Use a temporary file to avoid subshell issues with read
-    local temp_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_file=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     echo "$keys" > "$temp_file"
     
     # Use file descriptor 3 for the temp file to avoid conflict with stdin
@@ -511,7 +511,7 @@ ms_internal_interactive_setup_command() {
     echo ""
     
     # Use a temporary file to avoid subshell issues with read
-    local temp_file=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+    local temp_file=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     echo "$keys" > "$temp_file"
     
     # Use file descriptor 3 for the temp file to avoid conflict with stdin

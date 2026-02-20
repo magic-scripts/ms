@@ -19,6 +19,21 @@
 #   - handle_update()    Main update command handler
 
 handle_update() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Update installed commands to the latest version${NC}"
+        echo ""
+        echo "Usage: ms update [command|--all]"
+        echo ""
+        echo "Options:"
+        echo "  ${GREEN}--all${NC}          Update all installed commands"
+        echo ""
+        echo "Examples:"
+        echo "  ms update portcheck    # Update portcheck command"
+        echo "  ms update --all        # Update all installed commands"
+        echo "  ms update ms           # Update Magic Scripts itself"
+        exit 0
+    fi
+
     # Special case: ms update ms
     if [ "$1" = "ms" ]; then
         echo "${YELLOW}Updating Magic Scripts core...${NC}"
@@ -45,7 +60,7 @@ handle_update() {
             local raw_url="https://raw.githubusercontent.com/magic-scripts/ms/main"
             update_script_url="$raw_url/installer/update.sh"
         fi
-        local temp_update=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+        local temp_update=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
         
         printf "  Downloading update script... "
         if command -v download_file >/dev/null 2>&1; then
@@ -200,7 +215,7 @@ handle_update() {
                         failed_count=$((failed_count + 1))
                     fi
                 else
-                    echo "${YELLOW}not found in registry${NC}"
+                    echo "${YELLOW}not found in registry${NC} (installed: $(format_version "$installed_version"))"
                     failed_count=$((failed_count + 1))
                 fi
             else
@@ -255,7 +270,7 @@ handle_update() {
             fi
             
             # Download upgrade script with security validation
-            local temp_upgrade=$(mktemp) || { echo "Error: Cannot create temp file" >&2; return 1; }
+            local temp_upgrade=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
             if command -v download_file >/dev/null 2>&1; then
                 if download_file "$update_script_url" "$temp_upgrade"; then
                     upgrade_script="$temp_upgrade"
@@ -356,18 +371,18 @@ handle_update() {
         local temp_upgrade=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; exit 1; }
         if command -v download_file >/dev/null 2>&1; then
             if ! download_file "$update_script_url" "$temp_upgrade"; then
-                echo "${RED}Error: Failed to download update script${NC}"
+                echo "${RED}Error: Failed to download update script for version $requested_version${NC}"
                 rm -f "$temp_upgrade"
                 exit 1
             fi
         elif command -v curl >/dev/null 2>&1; then
             if ! curl -fsSL "$update_script_url" -o "$temp_upgrade"; then
-                echo "${RED}Error: Failed to download update script${NC}"
+                echo "${RED}Error: Failed to download update script for version $requested_version${NC}"
                 rm -f "$temp_upgrade"
                 exit 1
             fi
         else
-            echo "${RED}Error: curl required for update${NC}"
+            echo "${RED}Error: curl required to download version $requested_version${NC}"
             rm -f "$temp_upgrade"
             exit 1
         fi
@@ -447,8 +462,8 @@ handle_update() {
     comparison=$(version_compare "$installed_version" "$registry_version")
 
     echo "${YELLOW}Checking $cmd version...${NC}"
-    echo "  Installed: $installed_version"
-    echo "  Registry:  $registry_version"
+    echo "  Installed: $(format_version "$installed_version")"
+    echo "  Registry:  $(format_version "$registry_version")"
 
     if [ "$comparison" = "same" ] && [ "$installed_version" != "unknown" ]; then
         echo "${GREEN}✓ $cmd is already up to date ($(format_version "$installed_version"))${NC}"
@@ -490,7 +505,7 @@ handle_update() {
     printf "  Updating ${CYAN}%s${NC}... " "$cmd"
     if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url"; then
         echo "${GREEN}done${NC}"
-        echo "${GREEN}✓ Successfully updated $cmd ($(format_version "$installed_version") → $(format_version "$new_version"))${NC}"
+        echo "${GREEN}✓ Updated $cmd ($(format_version "$installed_version") → $(format_version "$new_version"))${NC}"
     else
         echo "${RED}failed${NC}"
         echo "${RED}Error: Failed to update $cmd${NC}"

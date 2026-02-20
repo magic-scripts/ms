@@ -23,6 +23,22 @@
 handle_info() {
     local cmd="$1"
 
+    if [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || [ "$cmd" = "help" ]; then
+        echo "${YELLOW}Show detailed information about a command${NC}"
+        echo ""
+        echo "${YELLOW}Usage:${NC}"
+        echo "  ${CYAN}ms info <command>${NC}"
+        echo ""
+        echo "${YELLOW}Shows:${NC}"
+        echo "  Command description, category, available versions, installation status,"
+        echo "  metadata (author, license, homepage), dependencies, and configuration keys."
+        echo ""
+        echo "${YELLOW}Examples:${NC}"
+        echo "  ${CYAN}ms info gigen${NC}        # Show info for gigen command"
+        echo "  ${CYAN}ms info portcheck${NC}    # Show info for portcheck"
+        exit 0
+    fi
+
     if [ -z "$cmd" ]; then
         ms_error "No command specified" "ms info <command>"
         return 1
@@ -305,12 +321,14 @@ handle_outdated() {
     local outdated_count=0
     local pinned_count=0
     local up_to_date_count=0
+    local unknown_count=0
 
     for cmd in $installed_commands; do
         local installed_version=$(get_installed_version "$cmd")
         local registry_version=$(get_registry_version "$cmd")
 
         if [ "$registry_version" = "unknown" ]; then
+            unknown_count=$((unknown_count + 1))
             continue
         fi
 
@@ -331,17 +349,35 @@ handle_outdated() {
     done
 
     echo ""
+    local total_installed=$(echo "$installed_commands" | wc -w | tr -d ' ')
     if [ $outdated_count -eq 0 ]; then
-        echo "${GREEN}All commands are up to date.${NC}"
+        echo "${GREEN}All commands are up to date${NC} ($total_installed installed)."
     else
-        echo "$outdated_count command(s) can be updated."
+        echo "$outdated_count command(s) can be updated (out of $total_installed installed)."
         [ $pinned_count -gt 0 ] && echo "$pinned_count command(s) are pinned (use 'ms unpin <cmd>' to allow updates)."
         echo "Run '${CYAN}ms update${NC}' to update all."
+    fi
+    if [ $unknown_count -gt 0 ]; then
+        echo "${YELLOW}Warning: $unknown_count command(s) have unknown registry version${NC}"
     fi
 }
 
 
 handle_versions() {
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+        echo "${YELLOW}Show available versions for a command${NC}"
+        echo ""
+        echo "Usage: ms versions <command>"
+        echo "       ms versions --all         # Show versions for all commands"
+        echo "       ms versions -r <registry> # Show versions for all commands in registry"
+        echo ""
+        echo "Examples:"
+        echo "  ms versions gigen            # Show available versions for gigen"
+        echo "  ms versions --all            # Show versions for all commands"
+        echo "  ms versions -r template      # Show versions for all commands in template registry"
+        exit 0
+    fi
+
     if [ $# -eq 0 ]; then
         ms_error "No command specified" "ms versions <command>"
         echo "Usage: ms versions <command>"
