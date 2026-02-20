@@ -1947,15 +1947,29 @@ handle_pub() {
 }
 
 # Apply a single GitHub Ruleset for branch protection
-# Args: repo (owner/repo) name (display name) pattern (refs/heads/...)
+# Args: repo (owner/repo) name (display name) pattern (refs/heads/...) branch_type (main|release)
 _pack_apply_ruleset() {
     local repo="$1"
     local name="$2"
     local pattern="$3"
+    local branch_type="$4"
+
+    local rules
+    if [ "$branch_type" = "main" ]; then
+        # Main branch: Allow direct push from pack_release, but prevent force push and enforce linear history
+        rules='[{"type":"non_fast_forward"},{"type":"required_linear_history"}]'
+    elif [ "$branch_type" = "release" ]; then
+        # Release branches: Maximum protection - prevent deletion, force push, and enforce linear history
+        # Note: Direct push is allowed for pack_release to create the branch, but modification is discouraged
+        rules='[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"}]'
+    else
+        # Fallback: Basic protection
+        rules='[{"type":"deletion"},{"type":"non_fast_forward"}]'
+    fi
 
     local json
-    json=$(printf '{"name":"%s","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["%s"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":false,"require_code_owner_review":false,"require_last_push_approval":false,"required_review_thread_resolution":false}}],"bypass_actors":[]}' \
-        "$name" "$pattern")
+    json=$(printf '{"name":"%s","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["%s"],"exclude":[]}},"rules":%s,"bypass_actors":[]}' \
+        "$name" "$pattern" "$rules")
 
     printf '%s' "$json" | gh api "repos/$repo/rulesets" --method POST --input - >/dev/null 2>/dev/null
 }
@@ -1977,10 +1991,18 @@ pack_protect() {
             echo "  ${GREEN}path${NC}    Path to git repository (default: current directory)"
             echo ""
             echo "${YELLOW}What it does:${NC}"
-            echo "  Applies GitHub Rulesets to block direct push, force-push, and deletion on:"
-            echo "    - main branch"
-            echo "    - release/** branches"
-            echo "  Changes must go through Pull Requests."
+            echo "  Applies GitHub Rulesets with different protection levels:"
+            echo ""
+            echo "  ${GREEN}main${NC} branch:"
+            echo "    • Prevents force push (non_fast_forward)"
+            echo "    • Enforces linear history (no merge commits)"
+            echo "    • Allows direct push from 'ms pub pack release'"
+            echo ""
+            echo "  ${GREEN}release/**${NC} branches:"
+            echo "    • Prevents deletion"
+            echo "    • Prevents force push"
+            echo "    • Enforces linear history"
+            echo "    • Immutable after initial push (by policy)"
             echo ""
             echo "${YELLOW}Requirements:${NC}"
             echo "  - git remote 'origin' must point to a GitHub repository"
@@ -2033,16 +2055,16 @@ pack_protect() {
 
     local failed=0
 
-    printf "  %-40s" "Protect main (refs/heads/main)"
-    if _pack_apply_ruleset "$gh_repo" "Protect main" "refs/heads/main"; then
+    printf "  %-50s" "Protect main (no force push, linear history)"
+    if _pack_apply_ruleset "$gh_repo" "Protect main" "refs/heads/main" "main"; then
         echo "${GREEN}done${NC}"
     else
         echo "${RED}failed${NC}"
         failed=$((failed + 1))
     fi
 
-    printf "  %-40s" "Protect releases (refs/heads/release/**)"
-    if _pack_apply_ruleset "$gh_repo" "Protect releases" "refs/heads/release/**"; then
+    printf "  %-50s" "Protect release/** (immutable, linear history)"
+    if _pack_apply_ruleset "$gh_repo" "Protect releases" "refs/heads/release/**" "release"; then
         echo "${GREEN}done${NC}"
     else
         echo "${RED}failed${NC}"
