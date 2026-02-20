@@ -340,6 +340,7 @@ handle_update() {
 
             if [ -z "$version_info" ]; then
                 echo "${RED}Error: Version '$requested_version' not found for ms${NC}"
+                echo "Run ${CYAN}ms versions ms${NC} to see available versions"
                 exit 1
             fi
 

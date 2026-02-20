@@ -769,7 +769,13 @@ case "$1" in
             fi
             _ri_full_cmd_info=$(get_command_info "$_reinstall_cmd" 2>/dev/null)
             if [ -z "$_ri_full_cmd_info" ]; then
-                ms_error "Command '$_reinstall_cmd' not found in any registry" "ms upgrade"
+                local current_ver=$(version_get_installed "$_reinstall_cmd" 2>/dev/null)
+                if [ -n "$current_ver" ] && [ "$current_ver" != "unknown" ]; then
+                    ms_error "Command '$_reinstall_cmd' not found in any registry" \
+                        "Currently installed: $(format_version "$current_ver")" "ms upgrade"
+                else
+                    ms_error "Command '$_reinstall_cmd' not found in any registry" "ms upgrade"
+                fi
                 continue
             fi
             _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
@@ -777,7 +783,9 @@ case "$1" in
                 _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | head -1)
             fi
             if [ -z "$_ri_version_info" ]; then
-                ms_error "No version available for '$_reinstall_cmd'"
+                local current_ver=$(version_get_installed "$_reinstall_cmd" 2>/dev/null)
+                ms_error "No version available for '$_reinstall_cmd'" \
+                    "Currently installed: $(format_version "$current_ver")"
                 continue
             fi
             # Run uninstall hook from existing metadata before reinstalling

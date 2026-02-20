@@ -15,11 +15,28 @@
 #   - ms.sh functions: ms_error(), format_version()
 #
 # Functions:
+#   - _show_install_status()              Helper to show installation status
 #   - execute_hook()                      Execute install/uninstall/update hooks
 #   - install_script()                    Core installation logic
 #   - install_registry_all()              Install all commands from a registry
 #   - install_commands_with_detection()   Install commands with multi-registry detection
 #   - handle_install()                    Main install command handler
+
+# Helper function to show installation status
+# Args: cmd
+# Returns: status string "(currently installed: vX.X.X)" or "(not installed)"
+_show_install_status() {
+    local cmd="$1"
+    local current=""
+    if command -v version_get_installed >/dev/null 2>&1; then
+        current=$(version_get_installed "$cmd" 2>/dev/null)
+    fi
+    if [ -n "$current" ] && [ "$current" != "unknown" ]; then
+        echo "(currently installed: $(format_version "$current"))"
+    else
+        echo "(not installed)"
+    fi
+}
 
 # Execute a hook script (install/uninstall/update)
 # Args: hook_url [additional args passed to hook]
@@ -442,7 +459,18 @@ install_commands_with_detection() {
 
         # Block if already installed
         if [ -f "$HOME/.local/bin/ms/$base_cmd" ]; then
-            printf "  ${CYAN}%-20s${NC}  already installed\n" "$base_cmd"
+            local installed_ver=""
+            if command -v version_get_installed >/dev/null 2>&1; then
+                installed_ver=$(version_get_installed "$base_cmd")
+            fi
+            if [ -n "$installed_ver" ] && [ "$installed_ver" != "unknown" ]; then
+                printf "  ${CYAN}%-20s${NC}  already installed ${YELLOW}($(format_version "$installed_ver"))${NC}\n" "$base_cmd"
+            else
+                printf "  ${CYAN}%-20s${NC}  already installed\n" "$base_cmd"
+            fi
+            if [ -n "$requested_version" ]; then
+                printf "    ${YELLOW}Requested: $(format_version "$requested_version")${NC}\n"
+            fi
             printf "    Use '${CYAN}ms update %s${NC}' to upgrade, or '${CYAN}ms reinstall %s${NC}' to reinstall\n" \
                 "$base_cmd" "$base_cmd"
             continue
@@ -512,12 +540,12 @@ $info_line"
         if [ "$reg_count" -eq 0 ]; then
             printf "  Installing ${CYAN}%s${NC}... " "$base_cmd"
             if [ -n "$requested_version" ]; then
-                echo "${RED}version $requested_version not found in any registry${NC}"
+                echo "${RED}version $requested_version not found in any registry${NC} $(_show_install_status "$base_cmd")"
             elif [ -n "$has_dev_only" ]; then
                 echo "${YELLOW}skipped${NC}"
                 echo "    No stable release available. Use ${CYAN}ms install ${base_cmd}:dev${NC} to install the dev version."
             else
-                echo "${RED}not found in any registry${NC}"
+                echo "${RED}not found in any registry${NC} $(_show_install_status "$base_cmd")"
             fi
             failed_count=$((failed_count + 1))
             continue
@@ -559,7 +587,7 @@ $info_line"
                 install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url"
                 install_result=$?
             else
-                echo "${RED}no version available${NC}"
+                echo "${RED}no version available${NC} $(_show_install_status "$base_cmd")"
                 install_result=1
             fi
 
@@ -629,7 +657,7 @@ EOF
                     install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
                     install_result=$?
                 else
-                    echo "${RED}no version available${NC}"
+                    echo "${RED}no version available${NC} $(_show_install_status "$base_cmd")"
                     install_result=1
                 fi
 
@@ -742,7 +770,15 @@ $1"
 
             # Block if already installed
             if [ -f "$HOME/.local/bin/ms/$cmd" ]; then
-                printf "  ${CYAN}%-20s${NC}  already installed\n" "$cmd"
+                local installed_ver=""
+                if command -v version_get_installed >/dev/null 2>&1; then
+                    installed_ver=$(version_get_installed "$cmd")
+                fi
+                if [ -n "$installed_ver" ] && [ "$installed_ver" != "unknown" ]; then
+                    printf "  ${CYAN}%-20s${NC}  already installed ${YELLOW}($(format_version "$installed_ver"))${NC}\n" "$cmd"
+                else
+                    printf "  ${CYAN}%-20s${NC}  already installed\n" "$cmd"
+                fi
                 printf "    Use '${CYAN}ms update %s${NC}' to upgrade, or '${CYAN}ms reinstall %s${NC}' to reinstall\n" \
                     "$cmd" "$cmd"
                 continue
