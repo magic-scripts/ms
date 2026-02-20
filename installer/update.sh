@@ -12,14 +12,19 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
 
-# Source core utilities
-UTILS_PATH="$(dirname "$0")/../core/utils.sh"
-if [ -f "$UTILS_PATH" ]; then
-    . "$UTILS_PATH" || {
-        echo "Error: Cannot load core utilities" >&2
-        exit 1
-    }
-fi
+# Define download_file function inline (update.sh runs as standalone script)
+download_file() {
+    local url="$1"
+    local dest="$2"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$dest" 2>/dev/null
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q "$url" -O "$dest" 2>/dev/null
+    else
+        return 1
+    fi
+}
 
 # Determine target branch from environment variables
 # MS_TARGET_VERSION: "dev", "1.0.0", etc. (preferred)
@@ -65,7 +70,7 @@ echo ""
 
 # Update core files
 mkdir -p "$MAGIC_DIR/core"
-for f in config.sh registry.sh metadata.sh version.sh pack.sh; do
+for f in utils.sh config.sh registry.sh metadata.sh version.sh pack.sh; do
     printf "  Downloading $f... "
     if download_file "$RAW_URL/core/$f" "$MAGIC_DIR/core/$f"; then
         printf "${GREEN}done${NC}\n"
