@@ -417,6 +417,14 @@ echo "Installing Magic Scripts core system..."
         exit 1
     fi
 
+    printf "  Downloading utils.sh... "
+    if download_file "$RAW_URL/core/utils.sh" "$MAGIC_DIR/core/utils.sh"; then
+        printf "${GREEN}done${NC}\n"
+    else
+        printf "${RED}failed${NC}\n"
+        exit 1
+    fi
+
     # Download lib modules
     mkdir -p "$MAGIC_DIR/lib"
 

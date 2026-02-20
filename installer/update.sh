@@ -12,6 +12,15 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/.local/bin/ms"
 MAGIC_DIR="$HOME/.local/share/magicscripts"
 
+# Source core utilities
+UTILS_PATH="$(dirname "$0")/../core/utils.sh"
+if [ -f "$UTILS_PATH" ]; then
+    . "$UTILS_PATH" || {
+        echo "Error: Cannot load core utilities" >&2
+        exit 1
+    }
+fi
+
 # Determine target branch from environment variables
 # MS_TARGET_VERSION: "dev", "1.0.0", etc. (preferred)
 # MS_TARGET_BRANCH: explicit branch override
@@ -36,36 +45,6 @@ fi
 
 # URLs
 RAW_URL="https://raw.githubusercontent.com/magic-scripts/ms/${BRANCH}"
-
-check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-download_file() {
-    local url="$1"
-    local output="$2"
-
-    # Basic URL validation for security
-    if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
-        echo "Error: Invalid URL format for download: $url" >&2
-        return 1
-    fi
-
-    # Security check: prevent access to localhost/internal IPs
-    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)" ; then
-        echo "Error: Downloads from local/internal addresses are not allowed for security" >&2
-        return 1
-    fi
-
-    if check_command curl; then
-        curl -fsSL "$url" -o "$output"
-    elif check_command wget; then
-        wget -q "$url" -O "$output"
-    else
-        echo "${RED}Error: curl or wget is required${NC}"
-        exit 1
-    fi
-}
 
 echo "========================================="
 echo "      Magic Scripts Self-Updater       "

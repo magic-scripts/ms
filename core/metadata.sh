@@ -35,7 +35,7 @@ metadata_get() {
 }
 
 # Set installation metadata
-# Args: cmd version registry_name registry_url checksum script_path [install_script] [uninstall_script]
+# Args: cmd version registry_name registry_url checksum script_path [install_script] [uninstall_script] [update_script] [install_script_checksum] [uninstall_script_checksum] [update_script_checksum]
 metadata_set() {
     local cmd="$1"
     local version="$2"
@@ -43,8 +43,12 @@ metadata_set() {
     local registry_url="$4"
     local checksum="$5"
     local script_path="$6"
-    local install_script="$7"      # Optional: install script URL
-    local uninstall_script="$8"    # Optional: uninstall script URL
+    local install_script="$7"           # Optional: install script URL
+    local uninstall_script="$8"         # Optional: uninstall script URL
+    local update_script="$9"            # Optional: update script URL
+    local install_script_checksum="${10}"       # Optional: install script checksum
+    local uninstall_script_checksum="${11}"     # Optional: uninstall script checksum
+    local update_script_checksum="${12}"        # Optional: update script checksum
 
     local installed_dir="$HOME/.local/share/magicscripts/installed"
     local meta_file="$installed_dir/$cmd.msmeta"
@@ -62,6 +66,10 @@ installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
 script_path=${script_path:-unknown}
 install_script=${install_script:-}
 uninstall_script=${uninstall_script:-}
+update_script=${update_script:-}
+install_script_checksum=${install_script_checksum:-}
+uninstall_script_checksum=${uninstall_script_checksum:-}
+update_script_checksum=${update_script_checksum:-}
 EOF
 }
 

@@ -39,11 +39,12 @@ _show_install_status() {
 }
 
 # Execute a hook script (install/uninstall/update)
-# Args: hook_url [additional args passed to hook]
+# Args: hook_url expected_checksum [additional args passed to hook]
 # Returns: 0 on success, 1 on failure
 execute_hook() {
     local hook_url="$1"
-    shift
+    local expected_checksum="$2"
+    shift 2
 
     if [ -z "$hook_url" ] || [ "$hook_url" = "" ]; then
         return 0
@@ -52,20 +53,123 @@ execute_hook() {
     local temp_hook=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     local hook_success=false
 
+    # Download hook script
     if command -v download_file >/dev/null 2>&1; then
         if download_file "$hook_url" "$temp_hook"; then
+            # Verify file is not empty
+            if [ ! -s "$temp_hook" ]; then
+                echo "${RED}Error: Downloaded hook script is empty${NC}" >&2
+                rm -f "$temp_hook"
+                return 1
+            fi
+
+            # Verify checksum if provided
+            if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "" ]; then
+                if command -v sha256sum >/dev/null 2>&1; then
+                    local actual_checksum=$(sha256sum "$temp_hook" | cut -d' ' -f1 | cut -c1-8)
+                    if [ "$actual_checksum" != "$expected_checksum" ]; then
+                        echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
+                        echo "  Expected: $expected_checksum" >&2
+                        echo "  Actual:   $actual_checksum" >&2
+                        rm -f "$temp_hook"
+                        return 1
+                    fi
+                elif command -v shasum >/dev/null 2>&1; then
+                    local actual_checksum=$(shasum -a 256 "$temp_hook" | cut -d' ' -f1 | cut -c1-8)
+                    if [ "$actual_checksum" != "$expected_checksum" ]; then
+                        echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
+                        echo "  Expected: $expected_checksum" >&2
+                        echo "  Actual:   $actual_checksum" >&2
+                        rm -f "$temp_hook"
+                        return 1
+                    fi
+                fi
+            fi
+
+            # Set proper permissions (read-only for security)
+            chmod 400 "$temp_hook"
+
+            # Execute hook
             if sh "$temp_hook" "$@" < /dev/tty; then
                 hook_success=true
             fi
         fi
     elif command -v curl >/dev/null 2>&1; then
         if curl -fsSL "$hook_url" -o "$temp_hook"; then
+            # Verify file is not empty
+            if [ ! -s "$temp_hook" ]; then
+                echo "${RED}Error: Downloaded hook script is empty${NC}" >&2
+                rm -f "$temp_hook"
+                return 1
+            fi
+
+            # Verify checksum if provided
+            if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "" ]; then
+                if command -v sha256sum >/dev/null 2>&1; then
+                    local actual_checksum=$(sha256sum "$temp_hook" | cut -d' ' -f1 | cut -c1-8)
+                    if [ "$actual_checksum" != "$expected_checksum" ]; then
+                        echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
+                        echo "  Expected: $expected_checksum" >&2
+                        echo "  Actual:   $actual_checksum" >&2
+                        rm -f "$temp_hook"
+                        return 1
+                    fi
+                elif command -v shasum >/dev/null 2>&1; then
+                    local actual_checksum=$(shasum -a 256 "$temp_hook" | cut -d' ' -f1 | cut -c1-8)
+                    if [ "$actual_checksum" != "$expected_checksum" ]; then
+                        echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
+                        echo "  Expected: $expected_checksum" >&2
+                        echo "  Actual:   $actual_checksum" >&2
+                        rm -f "$temp_hook"
+                        return 1
+                    fi
+                fi
+            fi
+
+            # Set proper permissions (read-only for security)
+            chmod 400 "$temp_hook"
+
+            # Execute hook
             if sh "$temp_hook" "$@" < /dev/tty; then
                 hook_success=true
             fi
         fi
     elif command -v wget >/dev/null 2>&1; then
         if wget -q "$hook_url" -O "$temp_hook"; then
+            # Verify file is not empty
+            if [ ! -s "$temp_hook" ]; then
+                echo "${RED}Error: Downloaded hook script is empty${NC}" >&2
+                rm -f "$temp_hook"
+                return 1
+            fi
+
+            # Verify checksum if provided
+            if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "" ]; then
+                if command -v sha256sum >/dev/null 2>&1; then
+                    local actual_checksum=$(sha256sum "$temp_hook" | cut -d' ' -f1 | cut -c1-8)
+                    if [ "$actual_checksum" != "$expected_checksum" ]; then
+                        echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
+                        echo "  Expected: $expected_checksum" >&2
+                        echo "  Actual:   $actual_checksum" >&2
+                        rm -f "$temp_hook"
+                        return 1
+                    fi
+                elif command -v shasum >/dev/null 2>&1; then
+                    local actual_checksum=$(shasum -a 256 "$temp_hook" | cut -d' ' -f1 | cut -c1-8)
+                    if [ "$actual_checksum" != "$expected_checksum" ]; then
+                        echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
+                        echo "  Expected: $expected_checksum" >&2
+                        echo "  Actual:   $actual_checksum" >&2
+                        rm -f "$temp_hook"
+                        return 1
+                    fi
+                fi
+            fi
+
+            # Set proper permissions (read-only for security)
+            chmod 400 "$temp_hook"
+
+            # Execute hook
             if sh "$temp_hook" "$@" < /dev/tty; then
                 hook_success=true
             fi
@@ -85,7 +189,7 @@ execute_hook() {
 
 
 # Core installation logic
-# Args: cmd script_uri registry_name version [force_flag] [install_hook_script] [uninstall_hook_script] [update_hook_script] [man_url]
+# Args: cmd script_uri registry_name version [force_flag] [install_hook_script] [uninstall_hook_script] [update_hook_script] [man_url] [install_hook_checksum] [uninstall_hook_checksum] [update_hook_checksum]
 # Returns: 0=success, 1=error, 2=already installed (skip)
 install_script() {
     local cmd="$1"
@@ -97,9 +201,13 @@ install_script() {
     local uninstall_hook_script="$7"
     local update_hook_script="$8"
     local man_url="$9"
-    
+    shift 9
+    local install_hook_checksum="$1"
+    local uninstall_hook_checksum="$2"
+    local update_hook_checksum="$3"
+
     # Handle legacy calls without version parameter
-    if [ "$4" = "force" ]; then
+    if [ "$version" = "force" ]; then
         version=""
         force_flag="force"
     fi
@@ -304,16 +412,16 @@ EOF
     if [ -n "$install_hook_script" ] && [ "$install_hook_script" != "" ]; then
         echo "  ${CYAN}Running install script for $cmd...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-        if execute_hook "$install_hook_script" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
+        if execute_hook "$install_hook_script" "$install_hook_checksum" "$cmd" "$version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
             echo "  ${GREEN}✓ Install hook completed${NC}"
         else
             echo "${YELLOW}Warning: Install script failed for $cmd, proceeding with installation${NC}" >&2
         fi
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
     fi
-    
+
     # Record comprehensive installation metadata
-    metadata_set "$cmd" "$target_version" "$final_registry_name" "$registry_url" "$registry_checksum" "$target_script" "$install_hook_script" "$uninstall_hook_script"
+    metadata_set "$cmd" "$target_version" "$final_registry_name" "$registry_url" "$registry_checksum" "$target_script" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"
     
     # Verify installation integrity
     version_verify_checksum "$cmd"
@@ -342,7 +450,7 @@ EOF
     if [ "$is_update" = true ] && [ -n "$update_hook_script" ] && [ "$update_hook_script" != "" ]; then
         echo "  ${CYAN}Running update script for $cmd ($(format_version "$old_version") → $(format_version "$target_version"))...${NC}"
         echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-        if execute_hook "$update_hook_script" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
+        if execute_hook "$update_hook_script" "$update_hook_checksum" "$cmd" "$old_version" "$target_version" "$target_script" "$INSTALL_DIR/$cmd" "$registry_name"; then
             echo "  ${GREEN}✓ Update hook completed${NC}"
         else
             echo "${YELLOW}Warning: Update script failed for $cmd${NC}" >&2
@@ -392,15 +500,18 @@ install_registry_all() {
         
         local install_result
         if [ -n "$version_info" ]; then
-            # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url
+            # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|install_checksum|uninstall_checksum|update_checksum
             local script_url=$(echo "$version_info" | cut -d'|' -f3)
             local version_name=$(echo "$version_info" | cut -d'|' -f2)
             local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
             local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
             local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
             local man_url=$(echo "$version_info" | cut -d'|' -f8)
-            
-            install_script "$cmd" "$script_url" "$registry_name" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
+            local install_hook_checksum=$(echo "$version_info" | cut -d'|' -f9)
+            local uninstall_hook_checksum=$(echo "$version_info" | cut -d'|' -f10)
+            local update_hook_checksum=$(echo "$version_info" | cut -d'|' -f11)
+
+            install_script "$cmd" "$script_url" "$registry_name" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"
             install_result=$?
         else
             echo "${RED}no version available${NC}"
@@ -585,8 +696,11 @@ $info_line"
                 local uninstall_hook_script=$(echo "$version_info" | cut -d'|' -f6)
                 local update_hook_script=$(echo "$version_info" | cut -d'|' -f7)
                 local man_url=$(echo "$version_info" | cut -d'|' -f8)
+                local install_hook_checksum=$(echo "$version_info" | cut -d'|' -f9)
+                local uninstall_hook_checksum=$(echo "$version_info" | cut -d'|' -f10)
+                local update_hook_checksum=$(echo "$version_info" | cut -d'|' -f11)
 
-                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url"
+                install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_hook_script" "$uninstall_hook_script" "$update_hook_script" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"
                 install_result=$?
             else
                 echo "${RED}no version available${NC} $(_show_install_status "$base_cmd")"
@@ -655,8 +769,11 @@ EOF
                     local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                     local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                     local man_url=$(echo "$version_info" | cut -d'|' -f8)
+                    local install_hook_checksum=$(echo "$version_info" | cut -d'|' -f9)
+                    local uninstall_hook_checksum=$(echo "$version_info" | cut -d'|' -f10)
+                    local update_hook_checksum=$(echo "$version_info" | cut -d'|' -f11)
 
-                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
+                    install_script "$base_cmd" "$script_url" "$target_registry" "$found_version" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"
                     install_result=$?
                 else
                     echo "${RED}no version available${NC} $(_show_install_status "$base_cmd")"
@@ -799,16 +916,19 @@ $1"
                     if [ -n "$version_info" ]; then
                         printf "  Installing ${CYAN}%s${NC} from ${YELLOW}%s${NC}... " "$cmd" "$specific_registry"
 
-                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url
+                        # Extract script URL from version info: version|version_name|script_url|checksum|install_script|uninstall_script|update_script|man_url|install_checksum|uninstall_checksum|update_checksum
                         local script_url=$(echo "$version_info" | cut -d'|' -f3)
                         local version_name=$(echo "$version_info" | cut -d'|' -f2)
                         local install_script_url=$(echo "$version_info" | cut -d'|' -f5)
                         local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                         local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                         local man_url=$(echo "$version_info" | cut -d'|' -f8)
+                        local install_hook_checksum=$(echo "$version_info" | cut -d'|' -f9)
+                        local uninstall_hook_checksum=$(echo "$version_info" | cut -d'|' -f10)
+                        local update_hook_checksum=$(echo "$version_info" | cut -d'|' -f11)
 
                         local install_result
-                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"
+                        install_script "$cmd" "$script_url" "$specific_registry" "$version_name" "" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"
                         install_result=$?
                     else
                         printf "  Installing ${CYAN}%s${NC}... " "$cmd"

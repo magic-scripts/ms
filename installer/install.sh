@@ -13,6 +13,15 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Source core utilities
+UTILS_PATH="$(dirname "$0")/../core/utils.sh"
+if [ -f "$UTILS_PATH" ]; then
+    . "$UTILS_PATH" || {
+        echo "Error: Cannot load core utilities" >&2
+        exit 1
+    }
+fi
+
 # Environment variables that should be set by the calling ms command:
 # - INSTALL_DIR: Where to install command wrappers
 # - MAGIC_DIR: Magic Scripts data directory  
@@ -22,39 +31,6 @@ NC='\033[0m'
 # - COMMAND_CHECKSUM: Expected checksum
 # - COMMAND_DESCRIPTION: Command description
 # - TEMP_DIR: Temporary directory for downloads
-
-check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-download_file() {
-    local url="$1"
-    local output="$2"
-
-    # Basic URL validation for security
-    if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
-        echo "Error: Invalid URL format for download: $url" >&2
-        return 1
-    fi
-
-    # Security check: prevent access to localhost/internal IPs
-    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)" ; then
-        echo "Error: Downloads from local/internal addresses are not allowed for security" >&2
-        return 1
-    fi
-
-    # Create directory if it doesn't exist
-    mkdir -p "$(dirname "$output")"
-
-    if check_command curl; then
-        curl -fsSL "$url" > "$output"
-    elif check_command wget; then
-        wget -q "$url" -O "$output"
-    else
-        echo "${RED}Error: curl or wget is required${NC}"
-        return 1
-    fi
-}
 
 # Validate required environment variables
 if [ -z "$INSTALL_DIR" ] || [ -z "$MAGIC_DIR" ] || [ -z "$COMMAND_NAME" ] || [ -z "$COMMAND_URL" ]; then

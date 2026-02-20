@@ -83,7 +83,7 @@ ms_internal_validate_config_key() {
     fi
     
     # Check if key is registered in the config registry
-    local key_entry=$(grep "^$key:" "$config_registry_file")
+    local key_entry=$(grep -F "$key:" "$config_registry_file")
     if [ -z "$key_entry" ]; then
         rm -f "$config_registry_file" 2>/dev/null
         return 1  # Key not registered, deny access
@@ -125,7 +125,7 @@ ms_internal_get_config_value() {
     
     # Get value from config file
     if [ -f "$CONFIG_FILE" ]; then
-        value=$(grep "^${key}=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | head -1)
+        value=$(grep -F "${key}=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | head -1)
     fi
     
     # Return value if found
@@ -175,7 +175,7 @@ get_config_value() {
         # Allow ms.sh full access to all registered keys
         if [ "$calling_script" != "ms" ]; then
             # First check if key is registered at all
-            if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
+            if ! grep -qF "$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
                 echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
@@ -190,7 +190,7 @@ get_config_value() {
             fi
         else
             # Even ms needs the key to be registered
-            if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
+            if ! grep -qF "$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
                 echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
@@ -209,30 +209,46 @@ get_config_value() {
 ms_internal_set_config_value() {
     local key="$1"
     local value="$2"
-    
+
     if [ -z "$key" ] || [ -z "$value" ]; then
         echo "${RED}Error: Both key and value are required${NC}" >&2
         return 1
     fi
-    
+
     ms_internal_ensure_config_dirs
-    
-    # Create config file if it doesn't exist
-    touch "$CONFIG_FILE" 2>/dev/null || {
-        echo "${RED}Error: Cannot create config file: $CONFIG_FILE${NC}" >&2
-        return 1
-    }
-    
-    # Remove existing key
-    grep -v "^${key}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" 2>/dev/null || true
-    
-    # Add new key=value
-    echo "${key}=${value}" >> "${CONFIG_FILE}.tmp"
-    
-    # Replace original file
-    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-    
-    echo "Set config: $key = $value"
+
+    # File locking to prevent race conditions
+    local lock_file="${CONFIG_FILE}.lock"
+    {
+        # Acquire exclusive lock (200 is the file descriptor)
+        flock -x 200 || {
+            echo "${RED}Error: Cannot acquire lock on config file${NC}" >&2
+            return 1
+        }
+
+        # Create config file if it doesn't exist
+        touch "$CONFIG_FILE" 2>/dev/null || {
+            echo "${RED}Error: Cannot create config file: $CONFIG_FILE${NC}" >&2
+            return 1
+        }
+
+        # Create temporary file using mktemp for atomic update
+        local temp_file=$(mktemp) || {
+            echo "${RED}Error: Cannot create temp file${NC}" >&2
+            return 1
+        }
+
+        # Remove existing key
+        grep -vF "${key}=" "$CONFIG_FILE" > "$temp_file" 2>/dev/null || true
+
+        # Add new key=value
+        echo "${key}=${value}" >> "$temp_file"
+
+        # Replace original file atomically
+        mv "$temp_file" "$CONFIG_FILE"
+
+        echo "Set config: $key = $value"
+    } 200>"$lock_file"
 }
 
 # Public API: Set configuration value with validation
@@ -263,7 +279,7 @@ set_config_value() {
         # Allow ms.sh full access to all registered keys
         if [ "$calling_script" != "ms" ]; then
             # First check if key is registered at all
-            if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
+            if ! grep -qF "$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
                 echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
@@ -278,7 +294,7 @@ set_config_value() {
             fi
         else
             # Even ms needs the key to be registered
-            if ! grep -q "^$key:" "$config_registry_file" 2>/dev/null; then
+            if ! grep -qF "$key:" "$config_registry_file" 2>/dev/null; then
                 rm -f "$config_registry_file" 2>/dev/null
                 echo "${RED}Error: Configuration key '$key' is not registered${NC}" >&2
                 echo "Use 'ms config list -r' to see available configuration keys" >&2
@@ -296,22 +312,40 @@ set_config_value() {
 # Internal function to remove configuration value
 ms_internal_remove_config_value() {
     local key="$1"
-    
+
     if [ -z "$key" ]; then
         echo "${RED}Error: Key is required${NC}" >&2
         return 1
     fi
-    
+
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Config file not found: $CONFIG_FILE" >&2
         return 1
     fi
-    
-    # Remove the key
-    grep -v "^${key}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" 2>/dev/null || true
-    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-    
-    echo "Removed config: $key"
+
+    # File locking to prevent race conditions
+    local lock_file="${CONFIG_FILE}.lock"
+    {
+        # Acquire exclusive lock
+        flock -x 200 || {
+            echo "${RED}Error: Cannot acquire lock on config file${NC}" >&2
+            return 1
+        }
+
+        # Create temporary file using mktemp for atomic update
+        local temp_file=$(mktemp) || {
+            echo "${RED}Error: Cannot create temp file${NC}" >&2
+            return 1
+        }
+
+        # Remove the key
+        grep -vF "${key}=" "$CONFIG_FILE" > "$temp_file" 2>/dev/null || true
+
+        # Replace original file atomically
+        mv "$temp_file" "$CONFIG_FILE"
+
+        echo "Removed config: $key"
+    } 200>"$lock_file"
 }
 
 # Public API: Remove configuration value with validation
@@ -346,7 +380,7 @@ ms_internal_get_config_key_info() {
     local config_registry_file=$(ms_internal_get_config_registry_file)
     
     if [ -f "$config_registry_file" ]; then
-        local result=$(grep "^$key:" "$config_registry_file" | head -1)
+        local result=$(grep -F "$key:" "$config_registry_file" | head -1)
         rm -f "$config_registry_file" 2>/dev/null
         echo "$result"
     else

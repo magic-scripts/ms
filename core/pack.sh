@@ -1,31 +1,40 @@
 #!/bin/sh
-# Magic Scripts - Pack Tools Module
+# Magic Scripts - Pack Tools Module (Main Loader)
 #
 # Developer/publisher tools for creating and releasing Magic Scripts commands.
 # This module is lazy-loaded only when "ms pub" commands are used.
 #
-# Functions exported:
-#   - pack_init()             - Scaffold new command project
-#   - pack_checksum()         - Calculate SHA256 checksum
-#   - pack_verify()           - Validate registry files
-#   - pack_version_add()      - Add version entry
-#   - pack_version_update()   - Update version checksum
-#   - pack_release()          - Full release workflow
-#   - pack_reg_add()          - Add registry entry
-#   - pack_reg_remove()       - Remove registry entry
-#   - pub_reg_init()          - Initialize .msreg file
-#   - pub_reg_add()           - Add entry with auto-detection
-#   - pub_reg_remove()        - Remove entry with auto-detection
-#   - handle_pub()            - Main pub command router
-#   - handle_pub_pack()       - Pack command router
-#   - handle_pub_reg()        - Reg command router
-#   - handle_pub_pack_version() - Version command router
+# Module Structure:
+#   - pack/checksum.sh  - Checksum calculation and verification
+#   - pack/main.sh      - Main command routing handlers
+#   - pack.sh (this)    - Legacy functions + module loader
 #
 # Dependencies:
 #   - registry.sh: download_file()
 #   - ms.sh globals: colors (RED, GREEN, YELLOW, CYAN, NC)
 #   - ms.sh functions: ms_error(), get_config_value(), calculate_file_checksum()
 #
+
+# Load pack modules
+# Note: When this file is sourced, we need to use MAGIC_SCRIPT_DIR or infer from load path
+# Try multiple locations to find the pack/ subdirectory
+for _pack_base in "$MAGIC_SCRIPT_DIR/core" "$SCRIPT_DIR/../core" "$(dirname "$0")"; do
+    if [ -f "$_pack_base/pack/checksum.sh" ]; then
+        . "$_pack_base/pack/checksum.sh" || {
+            echo "${RED}Error: Cannot load pack checksum module${NC}" >&2
+            return 1
+        }
+        . "$_pack_base/pack/main.sh" || {
+            echo "${RED}Error: Cannot load pack main module${NC}" >&2
+            return 1
+        }
+        break
+    fi
+done
+unset _pack_base
+
+# Note: Other functions (pack_init, pack_release, pack_verify, etc.)
+# remain in this file until fully migrated to modules
 
 # Check git global identity (warn only, non-fatal)
 _pack_check_git_config() {

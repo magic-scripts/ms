@@ -5,6 +5,15 @@
 
 VERSION="dev"
 
+# Source core utilities
+UTILS_PATH="$(dirname "$0")/utils.sh"
+if [ -f "$UTILS_PATH" ]; then
+    . "$UTILS_PATH" || {
+        echo "Error: Cannot load core utilities" >&2
+        exit 1
+    }
+fi
+
 # Registry directories and files
 REG_DIR="$HOME/.local/share/magicscripts/reg"
 REGLIST_FILE="$REG_DIR/reglist"
@@ -36,38 +45,6 @@ init_registry_dirs() {
                 mv "$REG_DIR/ms.msreg" "$REG_DIR/default.msreg" 2>/dev/null || true
             fi
         fi
-    fi
-}
-
-# Check if command exists
-check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Download file with curl or wget
-download_file() {
-    local url="$1"
-    local output="$2"
-    
-    # Basic URL validation for security
-    if ! echo "$url" | grep -q "^https\?://[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}"; then
-        echo "${RED}Error: Invalid URL format for download: $url${NC}" >&2
-        return 1
-    fi
-    
-    # Security check: prevent access to localhost/internal IPs
-    if echo "$url" | grep -q -E "(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)" ; then
-        echo "${RED}Error: Downloads from local/internal addresses are not allowed for security${NC}" >&2
-        return 1
-    fi
-    
-    if check_command curl; then
-        curl -fsSL "$url" -o "$output" 2>/dev/null
-    elif check_command wget; then
-        wget -q "$url" -O "$output" 2>/dev/null
-    else
-        echo "${RED}Error: curl or wget is required for downloading${NC}" >&2
-        return 1
     fi
 }
 
@@ -147,7 +124,7 @@ add_registry() {
     init_registry_dirs
     
     # Check if registry already exists
-    if [ -f "$REGLIST_FILE" ] && grep -q "^$name:" "$REGLIST_FILE"; then
+    if [ -f "$REGLIST_FILE" ] && grep -qF "$name:" "$REGLIST_FILE"; then
         echo "${RED}Error: Registry '$name' already exists${NC}" >&2
         return 1
     fi
@@ -188,13 +165,13 @@ remove_registry() {
     fi
 
     # Check if registry exists
-    if ! grep -q "^$name:" "$REGLIST_FILE"; then
+    if ! grep -qF "$name:" "$REGLIST_FILE"; then
         echo "${RED}Error: Registry '$name' not found${NC}" >&2
         return 1
     fi
     
     # Remove from reglist
-    grep -v "^$name:" "$REGLIST_FILE" > "${REGLIST_FILE}.tmp"
+    grep -vF "$name:" "$REGLIST_FILE" > "${REGLIST_FILE}.tmp"
     mv "${REGLIST_FILE}.tmp" "$REGLIST_FILE"
     
     # Remove registry file if exists
@@ -217,7 +194,7 @@ update_registry() {
     fi
 
     # Get URL for registry
-    url=$(grep "^$name:" "$REGLIST_FILE" | cut -d':' -f2-)
+    url=$(grep -F "$name:" "$REGLIST_FILE" | cut -d':' -f2-)
     if [ -z "$url" ]; then
         echo "${RED}Error: Registry '$name' not found in reglist${NC}" >&2
         return 1
@@ -283,37 +260,38 @@ update_registries() {
 
 # Get all commands from all registries
 get_all_commands() {
-    local temp_commands=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
-    
+    local temp_commands=$(create_temp_file "commands") || return 1
+
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
         grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
             [ -n "$cmd" ] && echo "$cmd" >> "$temp_commands"
         done
     fi
-    
+
     # Add commands from cached registries if not already in development registry
     if [ -f "$REGLIST_FILE" ]; then
         while IFS=':' read -r name url; do
             [ -z "$name" ] && continue
             [ -z "$url" ] && continue
             [ "${name#\#}" != "$name" ] && continue  # Skip comments
-            
+
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
                 grep -v "^#" "$reg_file" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
-                    if [ -n "$cmd" ] && ! grep -q "^$cmd$" "$temp_commands" 2>/dev/null; then
+                    if [ -n "$cmd" ] && ! grep -qFx "$cmd" "$temp_commands" 2>/dev/null; then
                         echo "$cmd" >> "$temp_commands"
                     fi
                 done
             fi
         done < "$REGLIST_FILE"
     fi
-    
+
     if [ -f "$temp_commands" ]; then
         sort -u "$temp_commands"
-        rm -f "$temp_commands"
     fi
+
+    cleanup_temp_file "$temp_commands"
 }
 
 # Get script information by command name
@@ -323,7 +301,7 @@ get_script_info() {
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
-        local result=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | head -1)
+        local result=$(grep -F "$cmd|" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | head -1)
         if [ -n "$result" ]; then
             echo "$result"
             return 0
@@ -339,7 +317,7 @@ get_script_info() {
             
             reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                local result=$(grep "^$cmd|" "$reg_file" | head -1)
+                local result=$(grep -F "$cmd|" "$reg_file" | head -1)
                 if [ -n "$result" ]; then
                     echo "$result"
                     return 0
@@ -441,7 +419,7 @@ _parse_msver_file() {
     local msver_file="$1"
     local target_version="$2"
 
-    while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3; do
+    while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3 extra4 extra5 extra6; do
         [ "${entry_type#\#}" != "$entry_type" ] && continue
         [ -z "$entry_type" ] && continue
 
@@ -450,7 +428,7 @@ _parse_msver_file() {
                 if [ -n "$target_version" ] && [ "$key" != "$target_version" ]; then
                     continue
                 fi
-                echo "version|$key|$value|$desc_or_checksum|$extra1|$extra2|$extra3"
+                echo "version|$key|$value|$desc_or_checksum|$extra1|$extra2|$extra3|$extra4|$extra5|$extra6"
                 ;;
         esac
     done < "$msver_file"
@@ -477,7 +455,7 @@ download_and_parse_msver() {
     local msver_url=""
 
     # Parse the file
-    while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3; do
+    while IFS='|' read -r entry_type key value desc_or_checksum extra1 extra2 extra3 extra4 extra5 extra6; do
         [ "${entry_type#\#}" != "$entry_type" ] && continue
         [ -z "$entry_type" ] && continue
 
@@ -487,7 +465,7 @@ download_and_parse_msver() {
                 if [ -n "$target_version" ] && [ "$key" != "$target_version" ]; then
                     continue
                 fi
-                echo "version|$key|$value|$desc_or_checksum|$extra1|$extra2|$extra3"
+                echo "version|$key|$value|$desc_or_checksum|$extra1|$extra2|$extra3|$extra4|$extra5|$extra6"
                 ;;
             config)
                 if [ -n "$target_cmd" ]; then
@@ -539,9 +517,9 @@ get_command_info() {
     # Check development registry first (if in development environment)
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
     if [ -f "$script_dir/registry/ms.msreg" ]; then
-        cmd_meta=$(grep "^$cmd|" "$script_dir/registry/ms.msreg" | head -1)
+        cmd_meta=$(grep -F "$cmd|" "$script_dir/registry/ms.msreg" | head -1)
     elif [ -n "${MAGIC_SCRIPT_DIR:-}" ] && [ -f "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" ]; then
-        cmd_meta=$(grep "^$cmd|" "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" | head -1)
+        cmd_meta=$(grep -F "$cmd|" "${MAGIC_SCRIPT_DIR}/registry/ms.msreg" | head -1)
     fi
 
     # Fallback to cached registries
@@ -553,7 +531,7 @@ get_command_info() {
 
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                cmd_meta=$(grep "^$cmd|" "$reg_file" | head -1)
+                cmd_meta=$(grep -F "$cmd|" "$reg_file" | head -1)
                 [ -n "$cmd_meta" ] && break
             fi
         done < "$REGLIST_FILE"
@@ -624,7 +602,7 @@ get_registry_url() {
     local registry_name="$1"
     
     if [ -f "$REGLIST_FILE" ]; then
-        grep "^$registry_name:" "$REGLIST_FILE" 2>/dev/null | cut -d':' -f2-
+        grep -F "$registry_name:" "$REGLIST_FILE" 2>/dev/null | cut -d':' -f2-
     fi
 }
 

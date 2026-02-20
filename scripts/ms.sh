@@ -65,8 +65,20 @@ NC='\033[0m'
 ms_error() {
     local message="$1"
     local suggestion="$2"
+    local exit_code="${3:-1}"
+
     echo "${RED}Error: $message${NC}" >&2
-    [ -n "$suggestion" ] && echo "  ${CYAN}Hint: $suggestion${NC}" >&2
+
+    if [ -n "$suggestion" ]; then
+        echo "  ${CYAN}Hint: $suggestion${NC}" >&2
+    fi
+
+    # exit_code=0이면 반환만, 아니면 exit
+    if [ "$exit_code" -ne 0 ]; then
+        exit "$exit_code"
+    fi
+
+    return 1
 }
 
 # Format version for display
@@ -736,6 +748,78 @@ handle_run() {
 }
 
 
+handle_reinstall() {
+    if [ $# -eq 0 ]; then
+        ms_error "No command specified" "ms reinstall <command>"
+        exit 1
+    fi
+
+    for _reinstall_cmd in "$@"; do
+        if [ "$_reinstall_cmd" = "ms" ]; then
+            echo "${YELLOW}Skipping ms — use '${CYAN}ms update ms${YELLOW}' instead${NC}"
+            continue
+        fi
+
+        _ri_full_cmd_info=$(get_command_info "$_reinstall_cmd" 2>/dev/null)
+        if [ -z "$_ri_full_cmd_info" ]; then
+            local current_ver=$(version_get_installed "$_reinstall_cmd" 2>/dev/null)
+            if [ -n "$current_ver" ] && [ "$current_ver" != "unknown" ]; then
+                ms_error "Command '$_reinstall_cmd' not found in any registry" \
+                    "Currently installed: $(format_version "$current_ver")" "ms upgrade"
+            else
+                ms_error "Command '$_reinstall_cmd' not found in any registry" "ms upgrade"
+            fi
+            continue
+        fi
+
+        _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
+        if [ -z "$_ri_version_info" ]; then
+            _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | head -1)
+        fi
+
+        if [ -z "$_ri_version_info" ]; then
+            local current_ver=$(version_get_installed "$_reinstall_cmd" 2>/dev/null)
+            ms_error "No version available for '$_reinstall_cmd'" \
+                "Currently installed: $(format_version "$current_ver")"
+            continue
+        fi
+
+        # Run uninstall hook from existing metadata before reinstalling
+        _ri_existing_uninstall=$(metadata_get "$_reinstall_cmd" "uninstall_script" 2>/dev/null)
+        _ri_existing_uninstall_checksum=$(metadata_get "$_reinstall_cmd" "uninstall_script_checksum" 2>/dev/null)
+        if [ -n "$_ri_existing_uninstall" ] && [ "$_ri_existing_uninstall" != "unknown" ] && [ "$_ri_existing_uninstall" != "" ]; then
+            echo "  ${CYAN}Running uninstall hook for $_reinstall_cmd...${NC}"
+            execute_hook "$_ri_existing_uninstall" "$_ri_existing_uninstall_checksum" "$_reinstall_cmd"
+        fi
+
+        # Get registry_name from existing .msmeta file
+        _ri_registry_name=""
+        _ri_meta_file="$MAGIC_SCRIPT_DIR/installed/${_reinstall_cmd}.msmeta"
+        if [ -f "$_ri_meta_file" ]; then
+            _ri_registry_name=$(grep "^registry_name=" "$_ri_meta_file" 2>/dev/null | cut -d'=' -f2-)
+        fi
+        [ -z "$_ri_registry_name" ] && _ri_registry_name="unknown"
+
+        _ri_found_ver=$(echo "$_ri_version_info" | cut -d'|' -f2)
+        _ri_script_url=$(echo "$_ri_version_info" | cut -d'|' -f3)
+        _ri_install_hook=$(echo "$_ri_version_info" | cut -d'|' -f5)
+        _ri_uninstall_hook=$(echo "$_ri_version_info" | cut -d'|' -f6)
+        _ri_update_hook=$(echo "$_ri_version_info" | cut -d'|' -f7)
+        _ri_man_url_val=$(echo "$_ri_version_info" | cut -d'|' -f8)
+        _ri_install_hook_checksum=$(echo "$_ri_version_info" | cut -d'|' -f9)
+        _ri_uninstall_hook_checksum=$(echo "$_ri_version_info" | cut -d'|' -f10)
+        _ri_update_hook_checksum=$(echo "$_ri_version_info" | cut -d'|' -f11)
+
+        printf "  Reinstalling ${CYAN}%s${NC}:${CYAN}%s${NC}... " "$_reinstall_cmd" "$_ri_found_ver"
+        if install_script "$_reinstall_cmd" "$_ri_script_url" "$_ri_registry_name" "$_ri_found_ver" "force" "$_ri_install_hook" "$_ri_uninstall_hook" "$_ri_update_hook" "$_ri_man_url_val" "$_ri_install_hook_checksum" "$_ri_uninstall_hook_checksum" "$_ri_update_hook_checksum"; then
+            echo "${GREEN}done${NC}"
+        else
+            echo "${RED}failed${NC} (attempted: $(format_version "$_ri_found_ver"))"
+        fi
+    done
+}
+
+
 # Load pack tools module (lazy loading)
 load_pack_tools() {
     if [ -z "${PACK_TOOLS_LOADED:-}" ]; then
@@ -811,62 +895,7 @@ case "$1" in
         ;;
     reinstall)
         shift
-        if [ $# -eq 0 ]; then
-            ms_error "No command specified" "ms reinstall <command>"
-            exit 1
-        fi
-        for _reinstall_cmd in "$@"; do
-            if [ "$_reinstall_cmd" = "ms" ]; then
-                echo "${YELLOW}Skipping ms — use '${CYAN}ms update ms${YELLOW}' instead${NC}"
-                continue
-            fi
-            _ri_full_cmd_info=$(get_command_info "$_reinstall_cmd" 2>/dev/null)
-            if [ -z "$_ri_full_cmd_info" ]; then
-                local current_ver=$(version_get_installed "$_reinstall_cmd" 2>/dev/null)
-                if [ -n "$current_ver" ] && [ "$current_ver" != "unknown" ]; then
-                    ms_error "Command '$_reinstall_cmd' not found in any registry" \
-                        "Currently installed: $(format_version "$current_ver")" "ms upgrade"
-                else
-                    ms_error "Command '$_reinstall_cmd' not found in any registry" "ms upgrade"
-                fi
-                continue
-            fi
-            _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | grep -v "^version|dev|" | head -1)
-            if [ -z "$_ri_version_info" ]; then
-                _ri_version_info=$(echo "$_ri_full_cmd_info" | grep "^version|" | head -1)
-            fi
-            if [ -z "$_ri_version_info" ]; then
-                local current_ver=$(version_get_installed "$_reinstall_cmd" 2>/dev/null)
-                ms_error "No version available for '$_reinstall_cmd'" \
-                    "Currently installed: $(format_version "$current_ver")"
-                continue
-            fi
-            # Run uninstall hook from existing metadata before reinstalling
-            _ri_existing_uninstall=$(metadata_get "$_reinstall_cmd" "uninstall_script" 2>/dev/null)
-            if [ -n "$_ri_existing_uninstall" ] && [ "$_ri_existing_uninstall" != "unknown" ] && [ "$_ri_existing_uninstall" != "" ]; then
-                echo "  ${CYAN}Running uninstall hook for $_reinstall_cmd...${NC}"
-                execute_hook "$_ri_existing_uninstall" "$_reinstall_cmd"
-            fi
-            # Get registry_name from existing .msmeta file
-            _ri_registry_name=""
-            _ri_meta_file="$MAGIC_SCRIPT_DIR/installed/${_reinstall_cmd}.msmeta"
-            if [ -f "$_ri_meta_file" ]; then
-                _ri_registry_name=$(grep "^registry_name=" "$_ri_meta_file" 2>/dev/null | cut -d'=' -f2-)
-            fi
-            [ -z "$_ri_registry_name" ] && _ri_registry_name="unknown"
-            _ri_found_ver=$(echo "$_ri_version_info" | cut -d'|' -f2)
-            _ri_script_url=$(echo "$_ri_version_info" | cut -d'|' -f3)
-            _ri_install_hook=$(echo "$_ri_version_info" | cut -d'|' -f5)
-            _ri_uninstall_hook=$(echo "$_ri_version_info" | cut -d'|' -f6)
-            _ri_update_hook=$(echo "$_ri_version_info" | cut -d'|' -f7)
-            _ri_man_url_val=$(echo "$_ri_version_info" | cut -d'|' -f8)
-            printf "  Reinstalling ${CYAN}%s${NC}:${CYAN}%s${NC}... " "$_reinstall_cmd" "$_ri_found_ver"
-            if install_script "$_reinstall_cmd" "$_ri_script_url" "$_ri_registry_name" "$_ri_found_ver" "force" "$_ri_install_hook" "$_ri_uninstall_hook" "$_ri_update_hook" "$_ri_man_url_val"; then
-                echo "${GREEN}done${NC}"
-            else
-                echo "${RED}failed${NC} (attempted: $(format_version "$_ri_found_ver"))"
-            fi
-        done
+        handle_reinstall "$@"
         ;;
     list|ls)
         shift

@@ -232,6 +232,7 @@ handle_uninstall() {
             
             # Execute uninstall script if exists
             local uninstall_script_url=$(get_installation_metadata "$cmd" "uninstall_script")
+            local uninstall_script_checksum=$(get_installation_metadata "$cmd" "uninstall_script_checksum")
             if [ -n "$uninstall_script_url" ] && [ "$uninstall_script_url" != "" ]; then
                 local version=$(get_installation_metadata "$cmd" "version")
                 local script_path=$(get_installation_metadata "$cmd" "script_path")
@@ -239,7 +240,7 @@ handle_uninstall() {
 
                 echo "  ${CYAN}Running uninstall script for $cmd...${NC}"
                 echo "  ${YELLOW}═══════════════════════════════════════${NC}"
-                if execute_hook "$uninstall_script_url" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name"; then
+                if execute_hook "$uninstall_script_url" "$uninstall_script_checksum" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name"; then
                     echo "  ${GREEN}Uninstall script completed successfully${NC}"
                     if [ "$cmd" = "ms" ] && [ "${MS_REINSTALL_MODE:-}" != "true" ]; then
                         echo "  ${GREEN}Magic Scripts has been completely removed.${NC}"
