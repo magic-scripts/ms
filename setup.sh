@@ -166,13 +166,13 @@ find_best_ms_version() {
         rm -f "$temp_package"
         
         # Parse version information from .msver file
-        while IFS='|' read -r entry_type version url checksum install_script uninstall_script _update_script _man_url; do
+        while IFS='|' read -r entry_type version url checksum install_script uninstall_script update_script man_url install_cs uninstall_cs update_cs; do
             [ "$entry_type" = "version" ] || continue
             
             # If specific version requested, match exactly
             if [ -n "$REQUESTED_VERSION" ]; then
                 if [ "$version" = "$REQUESTED_VERSION" ]; then
-                    echo "$version|$url|$checksum|$install_script|$uninstall_script"
+                    echo "$version|$url|$checksum|$install_script|$uninstall_script|$update_script|$man_url|$install_cs|$uninstall_cs|$update_cs"
                     rm -f "$temp_msver"
                     return 0
                 fi
@@ -186,6 +186,11 @@ find_best_ms_version() {
                 dev_checksum="$checksum"
                 dev_install_script="$install_script"
                 dev_uninstall_script="$uninstall_script"
+                dev_update_script="$update_script"
+                dev_man_url="$man_url"
+                dev_install_cs="$install_cs"
+                dev_uninstall_cs="$uninstall_cs"
+                dev_update_cs="$update_cs"
                 # Skip dev versions unless explicitly allowed
             fi
             
@@ -193,10 +198,15 @@ find_best_ms_version() {
             if [ "$version" != "dev" ]; then
                 if [ -z "$best_version" ]; then
                     best_version="$version"
-                    best_url="$url" 
+                    best_url="$url"
                     best_checksum="$checksum"
                     best_install_script="$install_script"
                     best_uninstall_script="$uninstall_script"
+                    best_update_script="$update_script"
+                    best_man_url="$man_url"
+                    best_install_cs="$install_cs"
+                    best_uninstall_cs="$uninstall_cs"
+                    best_update_cs="$update_cs"
                 else
                     if compare_versions "$version" "$best_version"; then
                         best_version="$version"
@@ -204,16 +214,26 @@ find_best_ms_version() {
                         best_checksum="$checksum"
                         best_install_script="$install_script"
                         best_uninstall_script="$uninstall_script"
+                        best_update_script="$update_script"
+                        best_man_url="$man_url"
+                        best_install_cs="$install_cs"
+                        best_uninstall_cs="$uninstall_cs"
+                        best_update_cs="$update_cs"
                     fi
                 fi
             else
                 # Dev version - can be used if requested or as fallback
                 if [ -z "$best_version" ]; then
                     best_version="$version"
-                    best_url="$url" 
+                    best_url="$url"
                     best_checksum="$checksum"
                     best_install_script="$install_script"
                     best_uninstall_script="$uninstall_script"
+                    best_update_script="$update_script"
+                    best_man_url="$man_url"
+                    best_install_cs="$install_cs"
+                    best_uninstall_cs="$uninstall_cs"
+                    best_update_cs="$update_cs"
                 fi
             fi
         done < "$temp_msver"
@@ -224,7 +244,7 @@ find_best_ms_version() {
     
     # If no suitable version found but dev version exists, use dev
     if [ -z "$best_version" ] && [ -n "$dev_version" ]; then
-        echo "$dev_version|$dev_url|$dev_checksum|$dev_install_script|$dev_uninstall_script"
+        echo "$dev_version|$dev_url|$dev_checksum|$dev_install_script|$dev_uninstall_script|$dev_update_script|$dev_man_url|$dev_install_cs|$dev_uninstall_cs|$dev_update_cs"
         return 0
     fi
     
@@ -237,7 +257,7 @@ find_best_ms_version() {
         exit 1
     fi
     
-    echo "$best_version|$best_url|$best_checksum|$best_install_script|$best_uninstall_script"
+    echo "$best_version|$best_url|$best_checksum|$best_install_script|$best_uninstall_script|$best_update_script|$best_man_url|$best_install_cs|$best_uninstall_cs|$best_update_cs"
 }
 
 update_shell_config() {
@@ -353,6 +373,11 @@ MS_URL=$(echo "$version_info" | cut -d'|' -f2)
 MS_CHECKSUM=$(echo "$version_info" | cut -d'|' -f3)
 MS_INSTALL_SCRIPT=$(echo "$version_info" | cut -d'|' -f4)
 MS_UNINSTALL_SCRIPT=$(echo "$version_info" | cut -d'|' -f5)
+MS_UPDATE_SCRIPT=$(echo "$version_info" | cut -d'|' -f6)
+MS_MAN_URL=$(echo "$version_info" | cut -d'|' -f7)
+MS_INSTALL_CHECKSUM=$(echo "$version_info" | cut -d'|' -f8)
+MS_UNINSTALL_CHECKSUM=$(echo "$version_info" | cut -d'|' -f9)
+MS_UPDATE_CHECKSUM=$(echo "$version_info" | cut -d'|' -f10)
 
 echo "${GREEN}Selected version: $MS_VERSION${NC}"
 echo ""
@@ -521,11 +546,40 @@ registry_url=$REGISTRY_URL
 checksum=$MS_CHECKSUM
 install_script=$MS_INSTALL_SCRIPT
 uninstall_script=$MS_UNINSTALL_SCRIPT
+update_script=$MS_UPDATE_SCRIPT
 installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
 script_path=$MAGIC_DIR/scripts/ms.sh
+install_script_checksum=$MS_INSTALL_CHECKSUM
+uninstall_script_checksum=$MS_UNINSTALL_CHECKSUM
+update_script_checksum=$MS_UPDATE_CHECKSUM
 EOF
 
 printf "${GREEN}done${NC}\n"
+
+# Install man page if provided
+if [ -n "$MS_MAN_URL" ] && [ "$MS_MAN_URL" != "" ]; then
+    local man_dir="$HOME/.local/share/man/man1"
+    local man_file="$man_dir/ms.1"
+
+    mkdir -p "$man_dir"
+
+    printf "Installing man page... "
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsSL "$MS_MAN_URL" -o "$man_file" 2>/dev/null; then
+            printf "${GREEN}done${NC}\n"
+        else
+            printf "${YELLOW}failed${NC}\n"
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -q "$MS_MAN_URL" -O "$man_file" 2>/dev/null; then
+            printf "${GREEN}done${NC}\n"
+        else
+            printf "${YELLOW}failed${NC}\n"
+        fi
+    else
+        printf "${YELLOW}skipped (curl/wget required)${NC}\n"
+    fi
+fi
 
 echo ""
 echo "Initializing registries..."

@@ -227,11 +227,14 @@ handle_doctor() {
                                     local uninstall_script_url=$(echo "$version_info" | cut -d'|' -f6)
                                     local update_script_url=$(echo "$version_info" | cut -d'|' -f7)
                                     local man_url=$(echo "$version_info" | cut -d'|' -f8)
+                                    local install_script_checksum=$(echo "$version_info" | cut -d'|' -f9)
+                                    local uninstall_script_checksum=$(echo "$version_info" | cut -d'|' -f10)
+                                    local update_script_checksum=$(echo "$version_info" | cut -d'|' -f11)
                                     local registry_name=$(get_installation_metadata "$cmd" "registry_name")
                                     if [ -z "$registry_name" ] || [ "$registry_name" = "unknown" ]; then
                                         registry_name="default"
                                     fi
-                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" >/dev/null 2>&1; then
+                                    if install_script "$cmd" "$script_url" "$registry_name" "$installed_version" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" "$install_script_checksum" "$uninstall_script_checksum" "$update_script_checksum" >/dev/null 2>&1; then
                                         echo "    ✅ $cmd: Reinstalled successfully"
                                         fixed_issues=$((fixed_issues + 1))
                                     else

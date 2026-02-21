@@ -44,15 +44,51 @@ version_set_installed() {
     fi
 }
 
+# Check if command has only dev versions
+# Args: cmd_info (output from get_command_info)
+# Returns: "dev" if only dev versions exist, empty otherwise
+version_check_dev_only() {
+    local versions_text="$1"
+
+    # Get all version lines
+    local all_versions
+    all_versions=$(printf '%s\n' "$versions_text" | grep "^version|")
+
+    # If no versions at all, not dev-only
+    [ -z "$all_versions" ] && return 1
+
+    # Get non-dev versions
+    local non_dev
+    non_dev=$(printf '%s\n' "$all_versions" | grep -v "^version|dev|")
+
+    # If we have versions but no non-dev versions, it's dev-only
+    if [ -z "$non_dev" ]; then
+        echo "dev"
+        return 0
+    fi
+
+    # Otherwise we have stable versions
+    return 1
+}
+
 # Get registry version for a command
 # Args: cmd
-# Returns: version string or "unknown"
+# Returns: version string, "dev" (if only dev versions), or "unknown"
 version_get_registry() {
     local cmd="$1"
     if command -v get_command_info >/dev/null 2>&1; then
         local cmd_info
         cmd_info=$(get_command_info "$cmd" 2>/dev/null)
         if [ -n "$cmd_info" ]; then
+            # Check if only dev versions exist
+            local dev_only
+            dev_only=$(version_check_dev_only "$cmd_info")
+            if [ "$dev_only" = "dev" ]; then
+                echo "dev"
+                return 0
+            fi
+
+            # Try to get latest stable version
             local latest_line
             latest_line=$(version_select_latest_stable "$cmd_info")
             if [ -n "$latest_line" ]; then

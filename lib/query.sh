@@ -246,7 +246,12 @@ handle_list() {
         local comparison
         comparison=$(version_compare "$installed" "$latest")
 
-        if [ "$latest" = "unknown" ]; then
+        if [ "$latest" = "dev" ]; then
+            # Dev-only package
+            printf "  ${CYAN}%-20s${NC}  ${BLUE}%-10s${NC}   %-10s  -\n" \
+                "$cmd_name" "$(format_version "$installed")" "(dev only)"
+        elif [ "$latest" = "unknown" ]; then
+            # Truly unknown (no versions found)
             printf "  ${CYAN}%-20s${NC}  ${BLUE}%-10s${NC}   %-10s  ?\n" \
                 "$cmd_name" "$(format_version "$installed")" "unknown"
         elif [ "$comparison" = "update_needed" ]; then
@@ -525,27 +530,31 @@ handle_ms_force_reinstall() {
     fi
     
     local script_url install_script_url uninstall_script_url update_script_url man_url version_name
+    local install_script_checksum uninstall_script_checksum update_script_checksum
     script_url=$(echo "$ms_info" | cut -d'|' -f3)
     version_name=$(echo "$ms_info" | cut -d'|' -f2)
     install_script_url=$(echo "$ms_info" | cut -d'|' -f5)
     uninstall_script_url=$(echo "$ms_info" | cut -d'|' -f6)
     update_script_url=$(echo "$ms_info" | cut -d'|' -f7)
     man_url=$(echo "$ms_info" | cut -d'|' -f8)
-    
+    install_script_checksum=$(echo "$ms_info" | cut -d'|' -f9)
+    uninstall_script_checksum=$(echo "$ms_info" | cut -d'|' -f10)
+    update_script_checksum=$(echo "$ms_info" | cut -d'|' -f11)
+
     if [ -z "$script_url" ]; then
         echo "${RED}✗ Invalid ms version information${NC}"
         return 1
     fi
-    
+
     echo "${CYAN}Updating Magic Scripts core script...${NC}"
     echo "─────────────────────────────────────────"
-    
+
     # Set reinstall mode to prevent early exit during uninstall
     export MS_REINSTALL_MODE=true
-    
+
     # Use install_script function to reinstall ms with force flag
     local install_result
-    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"; then
+    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" "$install_script_checksum" "$uninstall_script_checksum" "$update_script_checksum"; then
         install_result=0
     else
         install_result=1

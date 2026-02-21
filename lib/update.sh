@@ -214,7 +214,10 @@ handle_update() {
                     local uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
                     local update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
                     local man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
-                    if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" >/dev/null 2>&1; then
+                    local install_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f9)
+                    local uninstall_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f10)
+                    local update_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f11)
+                    if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum" >/dev/null 2>&1; then
                         echo "${GREEN}done${NC} ($(format_version "$installed_version") → $(format_version "$new_version"))"
                         updated_count=$((updated_count + 1))
                     else
@@ -444,14 +447,20 @@ handle_update() {
         local uninstall_hook
         local update_hook
         local man_url
+        local install_hook_checksum
+        local uninstall_hook_checksum
+        local update_hook_checksum
         script_url=$(printf '%s\n' "$version_info" | cut -d'|' -f3)
         install_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f5)
         uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
         update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
         man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
+        install_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f9)
+        uninstall_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f10)
+        update_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f11)
 
         printf "  Updating ${CYAN}%s${NC}:${CYAN}%s${NC}... " "$cmd" "$requested_version"
-        if install_script "$cmd" "$script_url" "default" "$requested_version" "force" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url"; then
+        if install_script "$cmd" "$script_url" "default" "$requested_version" "force" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"; then
             echo "${GREEN}done${NC}"
             echo "${GREEN}✓ $cmd updated ($(format_version "$installed_version") → $(format_version "$requested_version"))${NC}"
         else
@@ -502,15 +511,21 @@ handle_update() {
     local uninstall_hook
     local update_hook
     local man_url
+    local install_hook_checksum
+    local uninstall_hook_checksum
+    local update_hook_checksum
     script_url=$(printf '%s\n' "$version_info" | cut -d'|' -f3)
     new_version=$(printf '%s\n' "$version_info" | cut -d'|' -f2)
     install_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f5)
     uninstall_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f6)
     update_hook=$(printf '%s\n' "$version_info" | cut -d'|' -f7)
     man_url=$(printf '%s\n' "$version_info" | cut -d'|' -f8)
+    install_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f9)
+    uninstall_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f10)
+    update_hook_checksum=$(printf '%s\n' "$version_info" | cut -d'|' -f11)
 
     printf "  Updating ${CYAN}%s${NC}... " "$cmd"
-    if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url"; then
+    if install_script "$cmd" "$script_url" "default" "$new_version" "" "$install_hook" "$uninstall_hook" "$update_hook" "$man_url" "$install_hook_checksum" "$uninstall_hook_checksum" "$update_hook_checksum"; then
         echo "${GREEN}done${NC}"
         echo "${GREEN}✓ Updated $cmd ($(format_version "$installed_version") → $(format_version "$new_version"))${NC}"
     else
@@ -548,6 +563,7 @@ handle_ms_force_reinstall() {
     fi
     
     local script_url install_script_url uninstall_script_url update_script_url man_url version_name expected_checksum
+    local install_script_checksum uninstall_script_checksum update_script_checksum
     script_url=$(echo "$ms_info" | cut -d'|' -f3)
     expected_checksum=$(echo "$ms_info" | cut -d'|' -f4)
     version_name=$(echo "$ms_info" | cut -d'|' -f2)
@@ -555,21 +571,24 @@ handle_ms_force_reinstall() {
     uninstall_script_url=$(echo "$ms_info" | cut -d'|' -f6)
     update_script_url=$(echo "$ms_info" | cut -d'|' -f7)
     man_url=$(echo "$ms_info" | cut -d'|' -f8)
-    
+    install_script_checksum=$(echo "$ms_info" | cut -d'|' -f9)
+    uninstall_script_checksum=$(echo "$ms_info" | cut -d'|' -f10)
+    update_script_checksum=$(echo "$ms_info" | cut -d'|' -f11)
+
     if [ -z "$script_url" ]; then
         echo "${RED}✗ Invalid ms version information${NC}"
         return 1
     fi
-    
+
     echo "${CYAN}Updating Magic Scripts core script...${NC}"
     echo "─────────────────────────────────────────"
-    
+
     # Set reinstall mode to prevent early exit during uninstall
     export MS_REINSTALL_MODE=true
-    
+
     # Use install_script function to reinstall ms with force flag
     local install_result
-    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url"; then
+    if install_script "ms" "$script_url" "ms" "$version_name" "force" "$install_script_url" "$uninstall_script_url" "$update_script_url" "$man_url" "$install_script_checksum" "$uninstall_script_checksum" "$update_script_checksum"; then
         install_result=0
     else
         install_result=1
