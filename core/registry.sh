@@ -30,7 +30,8 @@ get_default_registry_url() {
 # Initialize registry directories and default reglist
 init_registry_dirs() {
     mkdir -p "$REG_DIR" 2>/dev/null || true
-    
+    mkdir -p "$REG_DIR/packages" 2>/dev/null || true
+
     # Create default reglist if it doesn't exist
     if [ ! -f "$REGLIST_FILE" ]; then
         echo "# Magic Scripts Registry List" > "$REGLIST_FILE"
@@ -249,12 +250,28 @@ update_registries() {
     
     echo ""
     echo "Updated $success_count/$total_count registries successfully"
-    
+
     if [ $success_count -lt $total_count ]; then
         echo "Some registries failed to update. Check network connection and URLs."
         return 1
     fi
-    
+
+    # Migrate registry formats from 4-field to 2-field
+    echo ""
+    echo "Migrating registry formats..."
+    while IFS=':' read -r name url; do
+        [ -z "$name" ] || [ -z "$url" ] && continue
+        [ "${name#\#}" != "$name" ] && continue
+
+        local reg_file="$REG_DIR/${name}.msreg"
+        if [ -f "$reg_file" ]; then
+            migrate_msreg_format "$reg_file"
+        fi
+    done < "$REGLIST_FILE"
+
+    # Refresh package caches after migration
+    refresh_package_caches
+
     return 0
 }
 
@@ -264,9 +281,14 @@ get_all_commands() {
 
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
+        local temp_entries=$(mktemp)
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" > "$temp_entries"
+
+        while IFS='|' read -r cmd script desc category rest; do
             [ -n "$cmd" ] && echo "$cmd" >> "$temp_commands"
-        done
+        done < "$temp_entries"
+
+        rm -f "$temp_entries"
     fi
 
     # Add commands from cached registries if not already in development registry
@@ -278,11 +300,16 @@ get_all_commands() {
 
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                grep -v "^#" "$reg_file" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
+                local temp_entries=$(mktemp)
+                grep -v "^#" "$reg_file" | grep -v "^$" > "$temp_entries"
+
+                while IFS='|' read -r cmd script desc category rest; do
                     if [ -n "$cmd" ] && ! grep -qFx "$cmd" "$temp_commands" 2>/dev/null; then
                         echo "$cmd" >> "$temp_commands"
                     fi
-                done
+                done < "$temp_entries"
+
+                rm -f "$temp_entries"
             fi
         done < "$REGLIST_FILE"
     fi
@@ -365,15 +392,40 @@ search_commands() {
     
     # Check development registry first (for version support)
     if [ -f "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" ]; then
-        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
+        local temp_entries=$(mktemp)
+        grep -v "^#" "${MAGIC_SCRIPT_DIR:-$(dirname "$0")}/registry/ms.msreg" | grep -v "^$" > "$temp_entries"
+
+        while IFS='|' read -r cmd mspack_url extra1 extra2; do
             [ -z "$cmd" ] && continue
-            
+
+            # Detect format by field count
+            local desc category
+            if [ -n "$extra2" ]; then
+                # Old 4-field format: cmd|mspack_url|desc|category
+                desc="$extra1"
+                category="$extra2"
+            else
+                # New 2-field format: cmd|mspack_url
+                # Get description and category from cached mspack
+                if ! is_mspack_cached "$cmd"; then
+                    cache_mspack "$mspack_url" "$cmd" >/dev/null 2>&1 || continue
+                fi
+
+                local mspack_cache=$(get_mspack_cache_path "$cmd")
+                desc=$(grep "^description|" "$mspack_cache" 2>/dev/null | cut -d'|' -f2)
+                category=$(grep "^category|" "$mspack_cache" 2>/dev/null | cut -d'|' -f2)
+
+                # Fallback if not found
+                [ -z "$desc" ] && desc="$cmd"
+                [ -z "$category" ] && category="utility"
+            fi
+
             if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
-                # Version info is in .msver file pointed by $script
-                # For now, just show basic info without version
                 printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
             fi
-        done
+        done < "$temp_entries"
+
+        rm -f "$temp_entries"
     fi
     
     # Fallback to cached registries if no results from development registry
@@ -382,17 +434,41 @@ search_commands() {
             [ -z "$name" ] && continue
             [ -z "$url" ] && continue
             [ "${name#\#}" != "$name" ] && continue  # Skip comments
-            
+
             local reg_file="$REG_DIR/${name}.msreg"
             if [ -f "$reg_file" ]; then
-                grep -v "^#" "$reg_file" | grep -v "^$" | while IFS='|' read -r cmd script desc category; do
+                local temp_entries=$(mktemp)
+                grep -v "^#" "$reg_file" | grep -v "^$" > "$temp_entries"
+
+                while IFS='|' read -r cmd mspack_url extra1 extra2; do
                     [ -z "$cmd" ] && continue
-                    
+
+                    # Detect format by field count
+                    local desc category
+                    if [ -n "$extra2" ]; then
+                        # Old 4-field format
+                        desc="$extra1"
+                        category="$extra2"
+                    else
+                        # New 2-field format - get from cached mspack
+                        if ! is_mspack_cached "$cmd"; then
+                            cache_mspack "$mspack_url" "$cmd" >/dev/null 2>&1 || continue
+                        fi
+
+                        local mspack_cache=$(get_mspack_cache_path "$cmd")
+                        desc=$(grep "^description|" "$mspack_cache" 2>/dev/null | cut -d'|' -f2)
+                        category=$(grep "^category|" "$mspack_cache" 2>/dev/null | cut -d'|' -f2)
+
+                        [ -z "$desc" ] && desc="$cmd"
+                        [ -z "$category" ] && category="utility"
+                    fi
+
                     if [ -z "$query" ] || echo "$cmd $desc $category" | grep -qi "$query"; then
-                        # Show basic info without version
                         printf "  %-12s %s [%s]\n" "$cmd" "$desc" "$category" >> "$temp_results"
                     fi
-                done
+                done < "$temp_entries"
+
+                rm -f "$temp_entries"
             fi
         done < "$REGLIST_FILE"
     fi
@@ -441,12 +517,34 @@ download_and_parse_msver() {
     local package_url="$1"
     local target_cmd="$2"
     local target_version="$3"
+    local force_refresh="${4:-false}"  # NEW: optional force refresh flag
 
     local temp_file=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
 
-    if ! download_file "$package_url" "$temp_file"; then
-        echo "${RED}Error: Cannot download package file from $package_url${NC}" >&2
-        return 1
+    # NEW: Try to use cached mspack if available (unless force refresh)
+    local mspack_cache=""
+    if [ "$force_refresh" != "true" ] && [ -n "$target_cmd" ]; then
+        mspack_cache=$(get_mspack_cache_path "$target_cmd")
+        if [ -f "$mspack_cache" ] && [ -s "$mspack_cache" ]; then
+            # Use cached file
+            cat "$mspack_cache" > "$temp_file"
+        else
+            # Download and cache
+            if ! download_file "$package_url" "$temp_file"; then
+                echo "${RED}Error: Cannot download package file from $package_url${NC}" >&2
+                rm -f "$temp_file"
+                return 1
+            fi
+            # Cache the downloaded mspack
+            cp "$temp_file" "$mspack_cache"
+        fi
+    else
+        # No caching (legacy path or force refresh)
+        if ! download_file "$package_url" "$temp_file"; then
+            echo "${RED}Error: Cannot download package file from $package_url${NC}" >&2
+            rm -f "$temp_file"
+            return 1
+        fi
     fi
 
     echo "" >> "$temp_file"
@@ -480,25 +578,45 @@ download_and_parse_msver() {
                 # 3-tier: this file is an mspack, store URL for later download
                 msver_url="$key"
                 ;;
-            name|description|author|license|license_url|repo_url|issues_url|homepage_url|docs_url|stability|min_ms_version)
-                # Package metadata: key|value
+            name|description|author|license|license_url|repo_url|issues_url|homepage_url|docs_url|stability|min_ms_version|category)
+                # Package metadata: key|value (NEW: added category)
                 echo "meta|$entry_type|$key"
                 ;;
         esac
     done < "$temp_file"
 
-    # If msver_url was found, this is a 3-tier mspack — download and parse the msver too
+    # NEW: If msver_url was found, download and cache the msver file
     if [ -n "$msver_url" ]; then
         local temp_msver=$(mktemp) || { rm -f "$temp_file"; return 1; }
-        if download_file "$msver_url" "$temp_msver"; then
-            echo "" >> "$temp_msver"
-            _parse_msver_file "$temp_msver" "$target_version"
+
+        # Try to use cached msver
+        local msver_cache=""
+        if [ "$force_refresh" != "true" ] && [ -n "$target_cmd" ]; then
+            msver_cache=$(get_msver_cache_path "$target_cmd")
+            if [ -f "$msver_cache" ] && [ -s "$msver_cache" ]; then
+                # Use cached msver
+                cat "$msver_cache" > "$temp_msver"
+            else
+                # Download and cache msver
+                if ! download_file "$msver_url" "$temp_msver"; then
+                    echo "${RED}Error: Cannot download .msver file from $msver_url${NC}" >&2
+                    rm -f "$temp_msver" "$temp_file"
+                    return 1
+                fi
+                # Cache the downloaded msver
+                cp "$temp_msver" "$msver_cache"
+            fi
         else
-            echo "${RED}Error: Cannot download .msver file from $msver_url${NC}" >&2
-            rm -f "$temp_msver"
-            rm -f "$temp_file"
-            return 1
+            # No caching (legacy path or force refresh)
+            if ! download_file "$msver_url" "$temp_msver"; then
+                echo "${RED}Error: Cannot download .msver file from $msver_url${NC}" >&2
+                rm -f "$temp_msver" "$temp_file"
+                return 1
+            fi
         fi
+
+        echo "" >> "$temp_msver"
+        _parse_msver_file "$temp_msver" "$target_version"
         rm -f "$temp_msver"
     fi
 
@@ -609,6 +727,252 @@ get_registry_url() {
 # Get version
 get_version() {
     echo "$VERSION"
+}
+
+# ============================================================================
+# Package Cache Management Functions
+# ============================================================================
+
+# Get cache file path for a command's mspack
+# Args: command_name
+# Returns: path to cache file
+get_mspack_cache_path() {
+    local cmd="$1"
+    echo "$REG_DIR/packages/${cmd}.mspack"
+}
+
+# Get cache file path for a command's msver
+# Args: command_name
+# Returns: path to cache file
+get_msver_cache_path() {
+    local cmd="$1"
+    echo "$REG_DIR/packages/${cmd}.msver"
+}
+
+# Check if mspack cache exists and is valid
+# Args: command_name
+# Returns: 0 if valid cache exists, 1 otherwise
+is_mspack_cached() {
+    local cmd="$1"
+    local cache_file=$(get_mspack_cache_path "$cmd")
+    [ -f "$cache_file" ] && [ -s "$cache_file" ]
+}
+
+# Check if msver cache exists and is valid
+# Args: command_name
+# Returns: 0 if valid cache exists, 1 otherwise
+is_msver_cached() {
+    local cmd="$1"
+    local cache_file=$(get_msver_cache_path "$cmd")
+    [ -f "$cache_file" ] && [ -s "$cache_file" ]
+}
+
+# Download and cache mspack file
+# Args: mspack_url command_name
+# Returns: 0 on success, 1 on failure
+cache_mspack() {
+    local mspack_url="$1"
+    local cmd="$2"
+    local cache_file=$(get_mspack_cache_path "$cmd")
+    local temp_file="${cache_file}.tmp"
+
+    if ! download_file "$mspack_url" "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # Validate format (basic check for mspack structure)
+    if ! grep -q "^name|" "$temp_file" 2>/dev/null; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # Atomic move
+    mv "$temp_file" "$cache_file"
+    return 0
+}
+
+# Download and cache msver file
+# Args: msver_url command_name
+# Returns: 0 on success, 1 on failure
+cache_msver() {
+    local msver_url="$1"
+    local cmd="$2"
+    local cache_file=$(get_msver_cache_path "$cmd")
+    local temp_file="${cache_file}.tmp"
+
+    if ! download_file "$msver_url" "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # Validate format (basic check for version entries)
+    if ! grep -q "^version|" "$temp_file" 2>/dev/null; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # Atomic move
+    mv "$temp_file" "$cache_file"
+    return 0
+}
+
+# Invalidate cache for a specific command
+# Args: command_name
+invalidate_package_cache() {
+    local cmd="$1"
+    rm -f "$(get_mspack_cache_path "$cmd")"
+    rm -f "$(get_msver_cache_path "$cmd")"
+}
+
+# Invalidate all package caches
+invalidate_all_package_caches() {
+    rm -rf "$REG_DIR/packages"
+    mkdir -p "$REG_DIR/packages" 2>/dev/null || true
+}
+
+# ============================================================================
+# Registry Format Migration
+# ============================================================================
+
+# Migrate .msreg from 4-field to 2-field format
+# Args: msreg_file_path
+# Returns: 0 on success or if already migrated, 1 on error
+migrate_msreg_format() {
+    local msreg_file="$1"
+
+    [ ! -f "$msreg_file" ] && return 0
+
+    # Check if already 2-field format
+    local first_line=$(grep -v "^#" "$msreg_file" | grep -v "^$" | head -1)
+    [ -z "$first_line" ] && return 0
+
+    local field_count=$(echo "$first_line" | awk -F'|' '{print NF}')
+    [ "$field_count" -eq 2 ] && return 0
+
+    if [ "$field_count" -lt 4 ]; then
+        echo "  ${YELLOW}Warning: ${msreg_file} has unexpected format (${field_count} fields)${NC}"
+        return 1
+    fi
+
+    echo "  Migrating $(basename "$msreg_file") to 2-field format..."
+
+    local temp_file=$(mktemp)
+    local entries_file=$(mktemp)
+
+    # POSIX-compliant: extract entries to temp file
+    grep -v "^#" "$msreg_file" | grep -v "^$" > "$entries_file"
+
+    # Safety check: verify entries exist
+    if [ ! -s "$entries_file" ]; then
+        rm -f "$temp_file" "$entries_file"
+        echo "  ${YELLOW}No entries to migrate${NC}"
+        return 0
+    fi
+
+    # Preserve comments (exclude old format line)
+    grep "^#" "$msreg_file" | grep -v "^# Format:" > "$temp_file" 2>/dev/null || true
+    echo "# Format: name|mspack_url" >> "$temp_file"
+    echo "#" >> "$temp_file"
+    echo "# Migrated from 4-field to 2-field format" >> "$temp_file"
+    echo "" >> "$temp_file"
+
+    # Convert entries (read from temp file - POSIX compliant!)
+    while IFS='|' read -r cmd mspack_url desc category rest; do
+        [ -z "$cmd" ] || [ -z "$mspack_url" ] && continue
+        echo "$cmd|$mspack_url" >> "$temp_file"
+    done < "$entries_file"
+
+    rm -f "$entries_file"
+
+    # Safety: verify result
+    if [ ! -s "$temp_file" ]; then
+        rm -f "$temp_file"
+        echo "  ${RED}Migration failed: no valid entries${NC}"
+        return 1
+    fi
+
+    # Atomic replace with error handling
+    if ! cp "$msreg_file" "${msreg_file}.backup"; then
+        rm -f "$temp_file"
+        echo "  ${RED}Migration failed: could not create backup${NC}"
+        return 1
+    fi
+
+    if ! mv "$temp_file" "$msreg_file"; then
+        mv "${msreg_file}.backup" "$msreg_file"
+        echo "  ${RED}Migration failed: restored from backup${NC}"
+        return 1
+    fi
+
+    echo "  ${GREEN}✓ Migrated (backup: $(basename "$msreg_file").backup)${NC}"
+    return 0
+}
+
+# Refresh package caches for all commands in all registries
+# Downloads and caches .mspack + .msver for each command
+refresh_package_caches() {
+    echo ""
+    echo "Refreshing package caches..."
+
+    local total=0
+    local success=0
+    local temp_entries=$(mktemp)
+
+    if [ ! -f "$REGLIST_FILE" ]; then
+        echo "No registries found"
+        rm -f "$temp_entries"
+        return 0
+    fi
+
+    while IFS=':' read -r name url; do
+        case "$name" in
+            ""|\#*) continue ;;
+        esac
+        [ -z "$url" ] && continue
+
+        local reg_file="$REG_DIR/${name}.msreg"
+        [ ! -f "$reg_file" ] && continue
+
+        # POSIX-compliant: use temp file instead of process substitution
+        grep -v "^#" "$reg_file" | grep -v "^$" > "$temp_entries"
+
+        while IFS='|' read -r cmd mspack_url rest; do
+            case "$cmd" in
+                ""|\#*) continue ;;
+            esac
+            [ -z "$mspack_url" ] && continue
+
+            total=$((total + 1))
+            printf "  Caching %s... " "$cmd"
+
+            if cache_mspack "$mspack_url" "$cmd" 2>/dev/null; then
+                # Also download and cache msver
+                local mspack_cache=$(get_mspack_cache_path "$cmd")
+                local msver_url=$(grep "^msver_url|" "$mspack_cache" 2>/dev/null | cut -d'|' -f2)
+
+                if [ -n "$msver_url" ]; then
+                    if cache_msver "$msver_url" "$cmd" 2>/dev/null; then
+                        echo "done"
+                        success=$((success + 1))
+                    else
+                        echo "failed (msver)"
+                    fi
+                else
+                    echo "done"
+                    success=$((success + 1))
+                fi
+            else
+                echo "failed"
+            fi
+        done < "$temp_entries"
+
+    done < "$REGLIST_FILE"
+
+    rm -f "$temp_entries"
+
+    echo ""
+    echo "Package cache refresh complete: $success/$total packages cached"
 }
 
 # Initialize on load

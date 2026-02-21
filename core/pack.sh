@@ -158,9 +158,9 @@ pack_init() {
         return 1
     fi
 
-    # Get defaults from config
-    local default_author=$(get_config_value "MS_AUTHOR_NAME" "Your Name")
-    local default_email=$(get_config_value "MS_AUTHOR_EMAIL" "your@email.com")
+    # Get defaults from config (suppress errors for unregistered keys)
+    local default_author=$(get_config_value "MS_AUTHOR_NAME" "Your Name" 2>/dev/null)
+    local default_email=$(get_config_value "MS_AUTHOR_EMAIL" "your@email.com" 2>/dev/null)
 
     # Interactive prompts for missing values (unless -y is set)
     if [ "$skip_interactive" = false ]; then
@@ -1005,16 +1005,18 @@ show_pub_reg_add_help() {
     echo "  ${CYAN}ms pub reg add <name>${NC} [options]"
     echo ""
     echo "${YELLOW}Options:${NC}"
-    echo "  ${GREEN}--file <path>${NC}         .msreg file (auto-detected if omitted)"
-    echo "  ${GREEN}--url <mspack_url>${NC}    Package manifest URL (required)"
-    echo "  ${GREEN}--description <text>${NC}  Command description (default: command name)"
-    echo "  ${GREEN}--category <cat>${NC}      Category (default: utilities)"
-    echo "  ${GREEN}-y, --yes${NC}             Skip interactive prompts"
+    echo "  ${GREEN}--file <path>${NC}      .msreg file (auto-detected if omitted)"
+    echo "  ${GREEN}--url <mspack_url>${NC} Package manifest URL (required)"
+    echo "  ${GREEN}-y, --yes${NC}          Skip interactive prompts"
     echo ""
     echo "${YELLOW}File Auto-Detection:${NC}"
     echo "  1. Searches registry/*.msreg"
     echo "  2. Falls back to ./*.msreg"
     echo "  3. If multiple found, prompts for selection"
+    echo ""
+    echo "${YELLOW}Note:${NC}"
+    echo "  Description and category are now stored in .mspack files only."
+    echo "  .msreg files contain only: name|mspack_url"
     echo ""
     echo "${YELLOW}Examples:${NC}"
     echo "  ${CYAN}ms pub reg add mycommand${NC}"
@@ -1309,8 +1311,9 @@ pack_verify() {
 
             local field_count
             field_count=$(echo "$line" | awk -F'|' '{print NF}')
-            if [ "$field_count" -lt 4 ]; then
-                echo "  ${RED}Line $line_num: Expected 4+ pipe-separated fields, got $field_count${NC}"
+            # Accept both 2-field (new format) and 4-field (legacy format)
+            if [ "$field_count" -ne 2 ] && [ "$field_count" -ne 4 ]; then
+                echo "  ${RED}Line $line_num: Expected 2 or 4 fields, got $field_count${NC}"
                 total_issues=$((total_issues + 1))
                 continue
             fi
@@ -1459,11 +1462,10 @@ pack_reg_add() {
     local msreg_file="$1"
     local name="$2"
     local mspack_url="$3"
-    local description="$4"
-    local category="$5"
+    # description and category removed - they belong in .mspack
 
-    if [ -z "$msreg_file" ] || [ -z "$name" ] || [ -z "$mspack_url" ] || [ -z "$description" ] || [ -z "$category" ]; then
-        ms_error "Missing required arguments" "ms pack reg add <msreg_file> <name> <mspack_url> <description> <category>"
+    if [ -z "$msreg_file" ] || [ -z "$name" ] || [ -z "$mspack_url" ]; then
+        ms_error "Missing required arguments" "ms pub reg add <msreg_file> <name> <mspack_url>"
         return 1
     fi
 
@@ -1481,14 +1483,6 @@ pack_reg_add() {
     case "$name" in
         *[!a-zA-Z0-9_-]*)
             ms_error "Invalid name '$name': use only letters, numbers, dashes, underscores"
-            return 1
-            ;;
-    esac
-
-    # Validate no pipe in fields
-    case "$description$category" in
-        *\|*)
-            ms_error "Description and category cannot contain pipe '|' characters"
             return 1
             ;;
     esac
@@ -1511,7 +1505,7 @@ pack_reg_add() {
             ;;
     esac
 
-    local entry_line="$name|$mspack_url|$description|$category"
+    local entry_line="$name|$mspack_url"
 
     ensure_trailing_newline "$msreg_file"
     echo "$entry_line" >> "$msreg_file"
@@ -1625,11 +1619,13 @@ pub_reg_init() {
     # Create file with header
     cat > "$file_path" <<EOF
 # $description
-# Format: name|mspack_url|description|category
+# Format: name|mspack_url
 #
 # Each command points to its own .mspack file containing:
-# - Package metadata (author, license, dependencies, config keys)
+# - Package metadata (author, license, dependencies, config keys, description, category)
 # - Link to .msver file for version information
+#
+# Note: description and category are now stored in .mspack files only (single source of truth)
 
 EOF
 
@@ -1650,8 +1646,6 @@ pub_reg_add() {
     local file_path=""
     local name=""
     local mspack_url=""
-    local description=""
-    local category=""
     local skip_interactive=false
 
     # Parse arguments
@@ -1663,14 +1657,6 @@ pub_reg_add() {
                 ;;
             --url)
                 mspack_url="$2"
-                shift 2
-                ;;
-            --description)
-                description="$2"
-                shift 2
-                ;;
-            --category)
-                category="$2"
                 shift 2
                 ;;
             -y|--yes)
@@ -1750,23 +1736,7 @@ pub_reg_add() {
             printf "Package URL (mspack): "
             read -r mspack_url < /dev/tty
         fi
-
-        if [ -z "$description" ]; then
-            printf "Description [${CYAN}$name${NC}]: "
-            read -r description < /dev/tty
-            [ -z "$description" ] && description="$name"
-        fi
-
-        if [ -z "$category" ]; then
-            printf "Category [${CYAN}utilities${NC}]: "
-            read -r category < /dev/tty
-            [ -z "$category" ] && category="utilities"
-        fi
     fi
-
-    # Set defaults if still empty
-    [ -z "$description" ] && description="$name"
-    [ -z "$category" ] && category="utilities"
 
     # Validate required fields
     if [ -z "$mspack_url" ]; then
@@ -1774,8 +1744,8 @@ pub_reg_add() {
         return 1
     fi
 
-    # Delegate to existing pack_reg_add for validation and insertion
-    pack_reg_add "$file_path" "$name" "$mspack_url" "$description" "$category"
+    # Delegate to pack_reg_add for validation and insertion
+    pack_reg_add "$file_path" "$name" "$mspack_url"
 }
 
 pub_reg_remove() {

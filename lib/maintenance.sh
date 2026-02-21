@@ -366,13 +366,14 @@ handle_doctor() {
                 case "$line" in
                     ""|\#*) continue ;;
                 esac
-                local field_count=$(echo "$line" | tr '|' '\n' | wc -l | tr -d ' ')
-                if [ "$field_count" -ne 4 ]; then
+                local field_count=$(echo "$line" | awk -F'|' '{print NF}')
+                # Accept both 2-field (new format) and 4-field (legacy format)
+                if [ "$field_count" -ne 2 ] && [ "$field_count" -ne 4 ]; then
                     bad_lines=$((bad_lines + 1))
                 fi
             done < "$reg_file"
             if [ "$bad_lines" -gt 0 ]; then
-                echo "  ❌ $reg_name.msreg: $bad_lines malformed entries (expected 4 fields)"
+                echo "  ❌ $reg_name.msreg: $bad_lines malformed entries (expected 2 or 4 fields)"
                 total_issues=$((total_issues + 1))
                 reg_format_ok=false
             else
@@ -562,6 +563,21 @@ handle_clean() {
     done
     echo "  Temp files: ${GREEN}$tmp_count${NC} file(s)"
     total_cleaned=$((total_cleaned + tmp_count))
+
+    # 4. Package cache (.mspack and .msver files)
+    local pkg_dir="$HOME/.local/share/magicscripts/reg/packages"
+    local pkg_count=0
+    if [ -d "$pkg_dir" ]; then
+        pkg_count=$(find "$pkg_dir" -type f 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$dry_run" = true ]; then
+            echo "  ${CYAN}Would remove:${NC} $pkg_dir/* (package cache)"
+        else
+            rm -rf "$pkg_dir"
+            mkdir -p "$pkg_dir"
+        fi
+    fi
+    echo "  Package cache: ${GREEN}$pkg_count${NC} file(s)"
+    total_cleaned=$((total_cleaned + pkg_count))
 
     echo ""
     if [ "$dry_run" = true ]; then

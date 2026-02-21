@@ -1,12 +1,15 @@
 # Magic Scripts Master Registry (3-Tier System)
-# Format: name|mspack_url|description|category
+# Format: name|mspack_url
 #
 # Each command points to its own .mspack file containing:
-# - Package metadata (author, license, dependencies, config keys)
+# - Package metadata (author, license, dependencies, config keys, description, category)
 # - Link to .msver file for version information
+#
+# Note: description and category are now stored in .mspack files only (single source of truth)
 
 # Core Commands - pointing to individual .mspack files in registry/ directories
-ms|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.mspack|Magic Scripts main interface|core
-mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/registry/mschecksum.mspack|SHA256 checksum calculator for Magic Scripts|utilities
-mshello|https://raw.githubusercontent.com/magic-scripts/mshello/main/registry/mshello.mspack|Hello World example for Magic Scripts|examples
-portcheck|https://raw.githubusercontent.com/magic-scripts/portcheck/main/registry/portcheck.mspack|Check and manage processes using specific ports|utilities
+ms|https://raw.githubusercontent.com/magic-scripts/ms/main/registry/ms.mspack
+mschecksum|https://raw.githubusercontent.com/magic-scripts/mschecksum/main/registry/mschecksum.mspack
+mshello|https://raw.githubusercontent.com/magic-scripts/mshello/main/registry/mshello.mspack
+portcheck|https://raw.githubusercontent.com/magic-scripts/portcheck/main/registry/portcheck.mspack
+sysmon|https://raw.githubusercontent.com/magic-scripts/sysmon/refs/heads/main/registry/sysmon.mspack
