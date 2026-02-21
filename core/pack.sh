@@ -411,7 +411,7 @@ Show help:
 .SH SEE ALSO
 .BR ms (1)
 .SH AUTHOR
-$author_name <$author_email>
+$author <$email>
 MAN_EOF
 
     echo ""

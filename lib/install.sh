@@ -50,7 +50,7 @@ execute_hook() {
         return 0
     fi
 
-    local temp_hook=$(mktemp) || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
+    local temp_hook=$(create_temp_file "hook") || { echo "${RED}Error: Cannot create temp file${NC}" >&2; return 1; }
     local hook_success=false
 
     # Download hook script
@@ -59,7 +59,7 @@ execute_hook() {
             # Verify file is not empty
             if [ ! -s "$temp_hook" ]; then
                 echo "${RED}Error: Downloaded hook script is empty${NC}" >&2
-                rm -f "$temp_hook"
+                cleanup_temp_file "$temp_hook"
                 return 1
             fi
 
@@ -71,7 +71,7 @@ execute_hook() {
                         echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
                         echo "  Expected: $expected_checksum" >&2
                         echo "  Actual:   $actual_checksum" >&2
-                        rm -f "$temp_hook"
+                        cleanup_temp_file "$temp_hook"
                         return 1
                     fi
                 elif command -v shasum >/dev/null 2>&1; then
@@ -80,7 +80,7 @@ execute_hook() {
                         echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
                         echo "  Expected: $expected_checksum" >&2
                         echo "  Actual:   $actual_checksum" >&2
-                        rm -f "$temp_hook"
+                        cleanup_temp_file "$temp_hook"
                         return 1
                     fi
                 fi
@@ -99,7 +99,7 @@ execute_hook() {
             # Verify file is not empty
             if [ ! -s "$temp_hook" ]; then
                 echo "${RED}Error: Downloaded hook script is empty${NC}" >&2
-                rm -f "$temp_hook"
+                cleanup_temp_file "$temp_hook"
                 return 1
             fi
 
@@ -111,7 +111,7 @@ execute_hook() {
                         echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
                         echo "  Expected: $expected_checksum" >&2
                         echo "  Actual:   $actual_checksum" >&2
-                        rm -f "$temp_hook"
+                        cleanup_temp_file "$temp_hook"
                         return 1
                     fi
                 elif command -v shasum >/dev/null 2>&1; then
@@ -120,7 +120,7 @@ execute_hook() {
                         echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
                         echo "  Expected: $expected_checksum" >&2
                         echo "  Actual:   $actual_checksum" >&2
-                        rm -f "$temp_hook"
+                        cleanup_temp_file "$temp_hook"
                         return 1
                     fi
                 fi
@@ -139,7 +139,7 @@ execute_hook() {
             # Verify file is not empty
             if [ ! -s "$temp_hook" ]; then
                 echo "${RED}Error: Downloaded hook script is empty${NC}" >&2
-                rm -f "$temp_hook"
+                cleanup_temp_file "$temp_hook"
                 return 1
             fi
 
@@ -151,7 +151,7 @@ execute_hook() {
                         echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
                         echo "  Expected: $expected_checksum" >&2
                         echo "  Actual:   $actual_checksum" >&2
-                        rm -f "$temp_hook"
+                        cleanup_temp_file "$temp_hook"
                         return 1
                     fi
                 elif command -v shasum >/dev/null 2>&1; then
@@ -160,7 +160,7 @@ execute_hook() {
                         echo "${RED}Error: Hook script checksum mismatch${NC}" >&2
                         echo "  Expected: $expected_checksum" >&2
                         echo "  Actual:   $actual_checksum" >&2
-                        rm -f "$temp_hook"
+                        cleanup_temp_file "$temp_hook"
                         return 1
                     fi
                 fi
@@ -178,7 +178,7 @@ execute_hook() {
         echo "${RED}Error: curl or wget required for hook script${NC}" >&2
     fi
 
-    rm -f "$temp_hook"
+    cleanup_temp_file "$temp_hook"
 
     if [ "$hook_success" = true ]; then
         return 0
@@ -299,7 +299,10 @@ install_script() {
             *)
                 # Local path - copy it
                 if [ -f "$script_uri" ]; then
-                    cp "$script_uri" "$target_script"
+                    if ! cp "$script_uri" "$target_script"; then
+                        echo "${RED}Error: Failed to copy script to $target_script${NC}" >&2
+                        return 1
+                    fi
                     chmod 755 "$target_script"
                 else
                     echo "${RED}Error: Local script not found: $script_uri${NC}" >&2
@@ -375,10 +378,15 @@ EOF
     local registry_url="unknown"  
     local registry_checksum="unknown"
     
-    if command -v get_script_info >/dev/null 2>&1; then
-        local script_info=$(get_script_info "$cmd" 2>/dev/null)
-        if [ -n "$script_info" ]; then
-            registry_checksum=$(echo "$script_info" | cut -d'|' -f7)
+    # Get checksum from version info, not registry entry
+    if command -v get_command_info >/dev/null 2>&1; then
+        local cmd_info=$(get_command_info "$cmd" "$registry_version" 2>/dev/null)
+        if [ -n "$cmd_info" ]; then
+            # Extract checksum from version line (field 4 of 11-field format)
+            local version_line=$(echo "$cmd_info" | grep "^version|$registry_version|" | head -1)
+            if [ -n "$version_line" ]; then
+                registry_checksum=$(echo "$version_line" | cut -d'|' -f4)
+            fi
         fi
     fi
     

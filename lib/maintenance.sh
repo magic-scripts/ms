@@ -362,18 +362,28 @@ handle_doctor() {
             [ ! -f "$reg_file" ] && continue
             local reg_name=$(basename "$reg_file" .msreg)
             local bad_lines=0
+            local line_num=0
+
             while IFS= read -r line; do
+                line_num=$((line_num + 1))
+
                 case "$line" in
                     ""|\#*) continue ;;
                 esac
+
                 local field_count=$(echo "$line" | awk -F'|' '{print NF}')
+
                 # Accept both 2-field (new format) and 4-field (legacy format)
                 if [ "$field_count" -ne 2 ] && [ "$field_count" -ne 4 ]; then
+                    if [ "$bad_lines" -eq 0 ]; then
+                        echo "  ❌ $reg_name.msreg: Found malformed entries:"
+                    fi
                     bad_lines=$((bad_lines + 1))
+                    echo "    ${YELLOW}Line $line_num: Expected 2 or 4 fields, got $field_count${NC}"
                 fi
             done < "$reg_file"
+
             if [ "$bad_lines" -gt 0 ]; then
-                echo "  ❌ $reg_name.msreg: $bad_lines malformed entries (expected 2 or 4 fields)"
                 total_issues=$((total_issues + 1))
                 reg_format_ok=false
             else
@@ -568,7 +578,10 @@ handle_clean() {
     local pkg_dir="$HOME/.local/share/magicscripts/reg/packages"
     local pkg_count=0
     if [ -d "$pkg_dir" ]; then
-        pkg_count=$(find "$pkg_dir" -type f 2>/dev/null | wc -l | tr -d ' ')
+        # POSIX-compliant file counting
+        for f in "$pkg_dir"/*; do
+            [ -f "$f" ] && pkg_count=$((pkg_count + 1))
+        done
         if [ "$dry_run" = true ]; then
             echo "  ${CYAN}Would remove:${NC} $pkg_dir/* (package cache)"
         else
@@ -733,45 +746,3 @@ handle_import() {
     [ $skipped_count -gt 0 ] && echo "  Skipped: ${GREEN}$skipped_count${NC}"
     [ $failed_count -gt 0 ] && echo "  Failed: ${RED}$failed_count${NC}"
 }
-handle_unpin() {
-    local cmd="$1"
-
-    if [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || [ "$cmd" = "help" ]; then
-        echo "${YELLOW}Unpin a command to allow updates${NC}"
-        echo ""
-        echo "${YELLOW}Usage:${NC}"
-        echo "  ${CYAN}ms unpin <command>${NC}"
-        echo ""
-        echo "Removes the version pin so the command can be updated again."
-        return 0
-    fi
-
-    if [ -z "$cmd" ]; then
-        ms_error "No command specified" "ms unpin <command>"
-        return 1
-    fi
-
-    local meta_file="$HOME/.local/share/magicscripts/installed/$cmd.msmeta"
-
-    if [ ! -f "$meta_file" ]; then
-        ms_error "'$cmd' is not installed" "Run 'ms install $cmd' first"
-        return 1
-    fi
-
-    local is_pinned=$(get_installation_metadata "$cmd" "pinned")
-    if [ "$is_pinned" != "true" ]; then
-        local current_ver=$(get_installed_version "$cmd")
-        echo "${YELLOW}'$cmd' is not pinned${NC} (current: $(format_version "$current_ver"))"
-        return 0
-    fi
-
-    # Remove pinned key by writing empty value
-    local tmp_file="${meta_file}.tmp"
-    grep -v "^pinned=" "$meta_file" > "$tmp_file"
-    mv "$tmp_file" "$meta_file"
-
-    local unpinned_ver=$(get_installed_version "$cmd")
-    echo "${GREEN}Unpinned '$cmd'${NC} (current: $(format_version "$unpinned_ver"))"
-    echo "  ${CYAN}Hint:${NC} This command will now be updated with 'ms update'"
-}
-

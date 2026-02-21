@@ -673,19 +673,38 @@ handle_run() {
 
     shift  # Remove command name, rest are args
 
-    if ! command -v get_script_info >/dev/null 2>&1; then
+    if ! command -v get_command_info >/dev/null 2>&1; then
         ms_error "Registry system not available" "Run 'ms upgrade' to update registries"
         return 1
     fi
 
-    local script_info=$(get_script_info "$cmd" 2>/dev/null)
-    if [ -z "$script_info" ]; then
+    # Get registry version (latest stable) for the command
+    local registry_version=""
+    if command -v version_get_registry >/dev/null 2>&1; then
+        registry_version=$(version_get_registry "$cmd")
+    fi
+
+    if [ -z "$registry_version" ] || [ "$registry_version" = "unknown" ]; then
+        ms_error "Cannot determine version for '$cmd'" "Run 'ms upgrade' to update registries"
+        return 1
+    fi
+
+    # Get command info including version details
+    local cmd_info=$(get_command_info "$cmd" "$registry_version" 2>/dev/null)
+    if [ -z "$cmd_info" ]; then
         ms_error "Command '$cmd' not found in any registry" "Run 'ms search' to see available commands"
         return 1
     fi
 
-    local script_url=$(echo "$script_info" | cut -d'|' -f3)
-    local expected_checksum=$(echo "$script_info" | cut -d'|' -f7)
+    # Extract URL and checksum from version line
+    local version_line=$(echo "$cmd_info" | grep "^version|$registry_version|" | head -1)
+    if [ -z "$version_line" ]; then
+        ms_error "Version information not found for '$cmd'" "Run 'ms upgrade' to update registries"
+        return 1
+    fi
+
+    local script_url=$(echo "$version_line" | cut -d'|' -f3)
+    local expected_checksum=$(echo "$version_line" | cut -d'|' -f4)
 
     local tmp_script="/tmp/ms_run_${cmd}_$$"
 
