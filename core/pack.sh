@@ -779,8 +779,14 @@ pack_release() {
 
         if [ -n "$ms_script" ] && [ -f "$ms_script" ]; then
             echo "  Updating VERSION in $ms_script to $version..."
-            sed -i.bak "s/^VERSION=\"dev\"/VERSION=\"$version\"/" "$ms_script"
-            rm -f "${ms_script}.bak"
+            # Cross-platform compatibility: GNU sed (Linux) vs BSD sed (macOS, FreeBSD)
+            if [ "$(uname)" = "Darwin" ] || [ "$(uname)" = "FreeBSD" ]; then
+                # BSD sed requires space or empty string after -i
+                sed -i '' "s/^VERSION=\"dev\"/VERSION=\"$version\"/" "$ms_script"
+            else
+                # GNU sed works with or without backup extension
+                sed -i "s/^VERSION=\"dev\"/VERSION=\"$version\"/" "$ms_script"
+            fi
         fi
 
         git add -A 2>/dev/null

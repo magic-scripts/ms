@@ -521,7 +521,7 @@ registry_url=$REGISTRY_URL
 checksum=$MS_CHECKSUM
 install_script=$MS_INSTALL_SCRIPT
 uninstall_script=$MS_UNINSTALL_SCRIPT
-installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
 script_path=$MAGIC_DIR/scripts/ms.sh
 EOF
 

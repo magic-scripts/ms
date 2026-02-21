@@ -89,7 +89,7 @@ version=${COMMAND_VERSION:-unknown}
 registry_name=${COMMAND_REGISTRY:-unknown}
 registry_url=${COMMAND_REGISTRY_URL:-unknown}
 checksum=${COMMAND_CHECKSUM:-unknown}
-installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+installed_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u)
 script_path=$script_path
 description=${COMMAND_DESCRIPTION:-Magic Scripts command}
 EOF

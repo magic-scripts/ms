@@ -95,10 +95,20 @@ create_temp_file() {
     local prefix="${1:-ms}"
     local temp_file
 
-    temp_file=$(mktemp -t "${prefix}.XXXXXX") || {
-        echo "${RED}Error: Cannot create temporary file${NC}" >&2
-        return 1
-    }
+    # Cross-platform compatibility: GNU mktemp (Linux) vs BSD mktemp (macOS, FreeBSD)
+    if [ "$(uname)" = "Darwin" ] || [ "$(uname)" = "FreeBSD" ]; then
+        # BSD mktemp: -t option auto-generates suffix
+        temp_file=$(mktemp -t "${prefix}") || {
+            echo "${RED}Error: Cannot create temporary file${NC}" >&2
+            return 1
+        }
+    else
+        # GNU mktemp: -t option requires full template
+        temp_file=$(mktemp -t "${prefix}.XXXXXX") || {
+            echo "${RED}Error: Cannot create temporary file${NC}" >&2
+            return 1
+        }
+    fi
 
     echo "$temp_file"
     return 0
