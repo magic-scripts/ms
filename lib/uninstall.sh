@@ -23,7 +23,8 @@ handle_uninstall() {
     echo ""
     
     INSTALL_DIR="$HOME/.local/bin/ms"
-    
+    local remove_all=false
+
     if [ $# -eq 0 ]; then
         echo "Usage: ${CYAN}ms uninstall <command1> [command2...]${NC}"
         echo ""
@@ -91,7 +92,6 @@ handle_uninstall() {
                 
                 # Check if other Magic Scripts commands are installed
                 local other_commands=""
-                local remove_all=false
                 if [ -d "$INSTALL_DIR" ]; then
                     for cmd_file in "$INSTALL_DIR"/*; do
                         [ -e "$cmd_file" ] || continue
@@ -177,13 +177,31 @@ handle_uninstall() {
                             rm -f "$HOME/.local/share/magicscripts/installed/ms.msmeta"
                             echo "  ${GREEN}Removed${NC}: ms metadata"
                         fi
-                        
+
                         # Remove ms script
                         if [ -f "$HOME/.local/share/magicscripts/scripts/ms.sh" ]; then
                             rm -f "$HOME/.local/share/magicscripts/scripts/ms.sh"
                             echo "  ${GREEN}Removed${NC}: ms script"
                         fi
-                        
+
+                        # Remove core libraries (ms-specific)
+                        if [ -d "$HOME/.local/share/magicscripts/core" ]; then
+                            rm -rf "$HOME/.local/share/magicscripts/core"
+                            echo "  ${GREEN}Removed${NC}: core libraries"
+                        fi
+
+                        # Remove lib modules (ms-specific)
+                        if [ -d "$HOME/.local/share/magicscripts/lib" ]; then
+                            rm -rf "$HOME/.local/share/magicscripts/lib"
+                            echo "  ${GREEN}Removed${NC}: lib modules"
+                        fi
+
+                        # Remove registry cache
+                        if [ -d "$HOME/.local/share/magicscripts/reg" ]; then
+                            rm -rf "$HOME/.local/share/magicscripts/reg"
+                            echo "  ${GREEN}Removed${NC}: registry cache"
+                        fi
+
                         # Only remove data directory if empty
                         if [ -z "$(ls -A "$HOME/.local/share/magicscripts" 2>/dev/null)" ]; then
                             rm -rf "$HOME/.local/share/magicscripts"
@@ -201,8 +219,16 @@ handle_uninstall() {
                 fi
                 
                 # Clean shell config based on remove_all choice
-                if [ "$remove_all" = true ] || [ ! -d "$INSTALL_DIR" ] || [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
-                    # Remove PATH if removing all commands or no commands remain
+                local should_clean_path=false
+                if [ "$remove_all" = true ]; then
+                    # Remove all PATH entries when removing all commands
+                    should_clean_path=true
+                elif [ ! -d "$INSTALL_DIR" ] || [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+                    # Remove PATH if no commands remain
+                    should_clean_path=true
+                fi
+
+                if [ "$should_clean_path" = true ]; then
                     for config_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
                         if [ -f "$config_file" ] && grep -q "\.local/bin/ms" "$config_file"; then
                             cp "$config_file" "${config_file}.magic-scripts-backup"
@@ -242,10 +268,6 @@ handle_uninstall() {
                 echo "  ${YELLOW}═══════════════════════════════════════${NC}"
                 if execute_hook "$uninstall_script_url" "$uninstall_script_checksum" "$cmd" "$version" "$script_path" "$INSTALL_DIR/$cmd" "$registry_name"; then
                     echo "  ${GREEN}Uninstall script completed successfully${NC}"
-                    if [ "$cmd" = "ms" ] && [ "${MS_REINSTALL_MODE:-}" != "true" ]; then
-                        echo "  ${GREEN}Magic Scripts has been completely removed.${NC}"
-                        exit 0
-                    fi
                 else
                     echo "${YELLOW}Warning: Uninstall script failed for $cmd $(format_version "$version"), proceeding with removal${NC}" >&2
                     if [ "$cmd" = "ms" ]; then
@@ -254,9 +276,24 @@ handle_uninstall() {
                             rm -f "$INSTALL_DIR/ms"
                             echo "  ${GREEN}Removed${NC}: ms command"
                         fi
-                        if [ -d "$HOME/.local/share/magicscripts" ]; then
-                            rm -rf "$HOME/.local/share/magicscripts"
-                            echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+
+                        # Respect user's choice in fallback
+                        if [ "$remove_all" = true ]; then
+                            # Remove everything
+                            if [ -d "$HOME/.local/share/magicscripts" ]; then
+                                rm -rf "$HOME/.local/share/magicscripts"
+                                echo "  ${GREEN}Removed${NC}: Magic Scripts data directory"
+                            fi
+                        else
+                            # Remove only ms-specific files
+                            if [ -d "$HOME/.local/share/magicscripts" ]; then
+                                rm -f "$HOME/.local/share/magicscripts/installed/ms.msmeta" 2>/dev/null
+                                rm -f "$HOME/.local/share/magicscripts/scripts/ms.sh" 2>/dev/null
+                                rm -rf "$HOME/.local/share/magicscripts/core" 2>/dev/null
+                                rm -rf "$HOME/.local/share/magicscripts/lib" 2>/dev/null
+                                rm -rf "$HOME/.local/share/magicscripts/reg" 2>/dev/null
+                                echo "  ${GREEN}Removed${NC}: ms-specific files"
+                            fi
                         fi
                         echo "  ${GREEN}Magic Scripts has been removed via fallback method.${NC}"
                         exit 0
