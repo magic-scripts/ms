@@ -217,15 +217,46 @@ ms_internal_set_config_value() {
 
     ms_internal_ensure_config_dirs
 
-    # File locking to prevent race conditions
+    # File locking to prevent race conditions (if flock available)
     local lock_file="${CONFIG_FILE}.lock"
-    {
-        # Acquire exclusive lock (200 is the file descriptor)
-        flock -x 200 || {
-            echo "${RED}Error: Cannot acquire lock on config file${NC}" >&2
-            return 1
-        }
+    local use_flock=false
+    if command -v flock >/dev/null 2>&1; then
+        use_flock=true
+    fi
 
+    if [ "$use_flock" = true ]; then
+        {
+            # Acquire exclusive lock (200 is the file descriptor)
+            flock -x 200 || {
+                echo "${RED}Error: Cannot acquire lock on config file${NC}" >&2
+                return 1
+            }
+
+            # Create config file if it doesn't exist
+            touch "$CONFIG_FILE" 2>/dev/null || {
+                echo "${RED}Error: Cannot create config file: $CONFIG_FILE${NC}" >&2
+                return 1
+            }
+
+            # Create temporary file using mktemp for atomic update
+            local temp_file=$(mktemp) || {
+                echo "${RED}Error: Cannot create temp file${NC}" >&2
+                return 1
+            }
+
+            # Remove existing key
+            grep -vF "${key}=" "$CONFIG_FILE" > "$temp_file" 2>/dev/null || true
+
+            # Add new key=value
+            echo "${key}=${value}" >> "$temp_file"
+
+            # Replace original file atomically
+            mv "$temp_file" "$CONFIG_FILE"
+
+            echo "Set config: $key = $value"
+        } 200>"$lock_file"
+    else
+        # Fallback without file locking (flock not available)
         # Create config file if it doesn't exist
         touch "$CONFIG_FILE" 2>/dev/null || {
             echo "${RED}Error: Cannot create config file: $CONFIG_FILE${NC}" >&2
@@ -247,8 +278,11 @@ ms_internal_set_config_value() {
         # Replace original file atomically
         mv "$temp_file" "$CONFIG_FILE"
 
+        # Clean up lock file if it exists
+        rm -f "$lock_file" 2>/dev/null || true
+
         echo "Set config: $key = $value"
-    } 200>"$lock_file"
+    fi
 }
 
 # Public API: Set configuration value with validation
@@ -323,15 +357,37 @@ ms_internal_remove_config_value() {
         return 1
     fi
 
-    # File locking to prevent race conditions
+    # File locking to prevent race conditions (if flock available)
     local lock_file="${CONFIG_FILE}.lock"
-    {
-        # Acquire exclusive lock
-        flock -x 200 || {
-            echo "${RED}Error: Cannot acquire lock on config file${NC}" >&2
-            return 1
-        }
+    local use_flock=false
+    if command -v flock >/dev/null 2>&1; then
+        use_flock=true
+    fi
 
+    if [ "$use_flock" = true ]; then
+        {
+            # Acquire exclusive lock
+            flock -x 200 || {
+                echo "${RED}Error: Cannot acquire lock on config file${NC}" >&2
+                return 1
+            }
+
+            # Create temporary file using mktemp for atomic update
+            local temp_file=$(mktemp) || {
+                echo "${RED}Error: Cannot create temp file${NC}" >&2
+                return 1
+            }
+
+            # Remove the key
+            grep -vF "${key}=" "$CONFIG_FILE" > "$temp_file" 2>/dev/null || true
+
+            # Replace original file atomically
+            mv "$temp_file" "$CONFIG_FILE"
+
+            echo "Removed config: $key"
+        } 200>"$lock_file"
+    else
+        # Fallback without file locking (flock not available)
         # Create temporary file using mktemp for atomic update
         local temp_file=$(mktemp) || {
             echo "${RED}Error: Cannot create temp file${NC}" >&2
@@ -344,8 +400,11 @@ ms_internal_remove_config_value() {
         # Replace original file atomically
         mv "$temp_file" "$CONFIG_FILE"
 
+        # Clean up lock file if it exists
+        rm -f "$lock_file" 2>/dev/null || true
+
         echo "Removed config: $key"
-    } 200>"$lock_file"
+    fi
 }
 
 # Public API: Remove configuration value with validation

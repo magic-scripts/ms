@@ -1708,10 +1708,12 @@ pub_reg_add() {
             echo "${YELLOW}Multiple .msreg files found:${NC}"
             local i=1
             local file_array=""
-            echo "$found_files" | while IFS= read -r f; do
+            while IFS= read -r f; do
                 echo "  ${GREEN}$i${NC}) $f"
                 i=$((i + 1))
-            done
+            done <<EOF
+$found_files
+EOF
             printf "Select file [${CYAN}1-$file_count${NC}]: "
             read -r selection < /dev/tty
             file_path=$(echo "$found_files" | sed -n "${selection}p")
@@ -1809,10 +1811,12 @@ pub_reg_remove() {
             # Multiple files - interactive selection
             echo "${YELLOW}Multiple .msreg files found:${NC}"
             local i=1
-            echo "$found_files" | while IFS= read -r f; do
+            while IFS= read -r f; do
                 echo "  ${GREEN}$i${NC}) $f"
                 i=$((i + 1))
-            done
+            done <<EOF
+$found_files
+EOF
             printf "Select file [${CYAN}1-$file_count${NC}]: "
             read -r selection < /dev/tty
             file_path=$(echo "$found_files" | sed -n "${selection}p")
